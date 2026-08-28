@@ -27,16 +27,34 @@ synthesize their four reports into one consolidated, paste-ready PR review.
 
 ## Measured impact
 
-<!-- filled in after the Bob run — see metrics/ -->
-| | Manual review | Bob parallel review |
-|---|---|---|
-| Wall-clock time | _TBD_ | _TBD_ |
-| Defects written up (of 13 catalogued in the diff) | _TBD_ | _TBD_ |
-| Prior knowledge of the defects | _see below_ | none |
+Reviewing PR #1 — 5 files, +67 −9 — for four concerns at once:
 
-The manual baseline protocol, including how the reviewer's prior knowledge is
-accounted for, is in [`metrics/manual-baseline.md`](metrics/manual-baseline.md).
-Defects are scored against an audited list of 13 in the PR diff.
+| | Measured |
+|---|---|
+| Four specialist reviews, dispatched together | **98 seconds** |
+| Full consolidated review, prompt to finished file | **6 min 12 s** |
+| Findings raised | 37 raw → **17** after merge |
+| Severity | 4 critical · 8 high · 4 medium · 1 low |
+| Verdict | Request changes |
+
+The four critical findings are each independently a merge blocker: remote code
+execution via `eval()` on a request body, a parameterised SQL query deliberately
+rewritten into string interpolation, an authentication token whose user identity is
+never verified against its signature, and a second SQL injection in the delete path.
+
+Two of those are near-invisible to a skimming reviewer. The token bug is four lines
+that look like ordinary parsing. And one documentation finding is not a *missing*
+docstring but a false one — it promises a signed JWT expiring in 24 hours, and the
+function neither signs nor expires anything.
+
+**How these numbers were obtained.** Bob has no wall clock; it reports `null` for
+every timestamp rather than inventing one. All timings here are measured externally
+from artifact modification times and a screen recording, and are recorded with their
+method in [`reviews/run-metadata.json`](reviews/run-metadata.json). Finding counts
+are Bob's own, and both the pre-merge (37) and post-merge (17) figures are published
+so the merge is auditable.
+
+No human-baseline comparison is claimed here, because none was measured.
 
 ## Repository layout
 

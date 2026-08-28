@@ -7,30 +7,25 @@ doing the work.
 
 ---
 
-## ⚠️ Numbers to fill before recording
+## Measured numbers — all final, nothing to fill
 
-Every `{{...}}` below comes from a real run. Do not estimate any of them on camera.
-
-| Placeholder | Source |
+| | Value |
 |---|---|
-| `{{MANUAL_MINUTES}}` | Timed manual write-up of `pr/PR-1.diff` — see the baseline note below |
-| `{{MANUAL_FOUND}}` | Defects written up manually, scored vs `metrics/answer-key.md` |
-| `{{BOB_TIME}}` | `run-metadata.json` → `wall_clock_seconds` |
-| `{{BOB_FOUND}}` | `run-metadata.json` → `findings_after_dedupe` |
-| `{{PLANTED}}` | 13 (diff-scoped) — already known |
-| `{{CRITICAL_NAME}}` | The critical finding you'll spotlight (expected: the token identity bug) |
+| Four parallel reviews | **98 s** (longest subagent 1m38s, all from one dispatch) |
+| End to end, prompt to finished review | **6 min 12 s** |
+| Findings | **37 raw → 17 merged** |
+| Severity | 4 critical · 8 high · 4 medium · 1 low |
+| Verdict | Request changes |
 
-**On the baseline.** If a cold reviewer did it, say so and compare directly. If
-you did it yourself, you knew every defect in advance — so your time is a *floor*
-on manual review and your find count is a *ceiling*, both biased against Bob.
-Disclose it in one sentence on camera. A metric that leans against your own
-product is the kind people believe.
+**No human baseline was measured, so do not claim one.** Do not say "a manual review
+takes 25 minutes" on camera — you did not time one. Say what the PR contains and
+what Bob found. The 20–40 minute figure in the opening is a statement about code
+review generally, not a measurement of you; keep it phrased that way.
 
-If Bob finds fewer than the manual pass, **say that instead**. A real mixed result
-is more credible than a suspiciously clean sweep, and judges scoring
-"effectiveness" have seen a lot of the latter.
-
----
+**Bob has no clock.** It reports `null` for timing, and the review itself reads
+"Reviewed by four parallel passes in N/A (timing not available)". That is a feature
+worth one sentence on camera — an agent declining to state something it cannot
+measure — not something to hide.
 
 ## Pre-record checklist
 
@@ -187,19 +182,19 @@ raw `##` and backticks throw that away in the one shot where it matters.
 
 **On screen:** Timer, then the review's header line.
 
-> "{{BOB_TIME}}. And it's formatted to paste straight into GitHub."
+> "Six minutes twelve, start to finish. And it's formatted to paste straight into GitHub."
 
 ---
 
 ### 2:35 – 2:57 · Impact and close (22s)
 
-**On screen:** Split — `metrics/manual-baseline.md` beside `PR-1-review.md`.
+**On screen:** `reviews/run-metadata.json` beside `PR-1-review.md`.
 
-> "I built this codebase — I knew every defect going in. Writing up a complete
-> four-concern review still took me {{MANUAL_MINUTES}} minutes. That's a floor,
-> not an average. IBM Bob's four parallel agents, with no prior knowledge:
-> {{BOB_TIME}}, {{BOB_FOUND}} of {{PLANTED}}. Four specialists read this PR
-> instead of one generalist reading it four times."
+> "Four specialist reviews, dispatched together, done in ninety-eight seconds.
+> Full consolidated review in six minutes. Thirty-seven findings merged to
+> seventeen — four critical, each one a merge blocker. And notice the timing field
+> reads null: IBM Bob has no clock, so it won't report a number it can't measure.
+> Everything you just saw was measured outside the agent."
 
 **End card:** repo URL.
 
