@@ -1,0 +1,27 @@
+# Files IBM Bob should NOT read or index.
+# Keeps credentials out of Bob's context window and out of task session
+# screenshots that get published with the hackathon submission.
+
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+secrets.json
+ibm-credentials.env
+
+# Noise — no value in review context, wastes Bobcoins
+node_modules/
+__pycache__/
+.venv/
+venv/
+.git/
+.pytest_cache/
+htmlcov/
+.DS_Store
+
+# Bob's own evidence folder — don't let Bob re-read its own screenshots
+bob_sessions/
+
+# Scoring key — Bob must not see the planted-issue list
+metrics/answer-key.md

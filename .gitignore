@@ -1,0 +1,39 @@
+# ---- SECRETS: never commit (hackathon rule — leaked IBM Cloud keys can suspend the account)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+credentials.json
+secrets.json
+ibm-credentials.env
+.bob/credentials*
+**/apikey*
+**/*apikey*
+**/*api_key*
+**/*_secret*
+
+# ---- Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Node
+node_modules/
+npm-debug.log*
+
+# ---- OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# ---- Local scratch (not part of the submission)
+scratch/
+tmp/
+devnotes.db
