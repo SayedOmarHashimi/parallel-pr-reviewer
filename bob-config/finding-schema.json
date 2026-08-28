@@ -1,0 +1,28 @@
+{
+  "$comment": "Every subagent emits exactly this shape to reviews/raw/<reviewer>.json. The orchestrator merges on it, so deviations break the merge.",
+  "reviewer": "security | style | tests | docs",
+  "scope": "diff | repo",
+  "target": "string — what was reviewed, e.g. 'PR #42 (main...pr/saved-filters-and-admin-delete)'",
+  "findings": [
+    {
+      "id": "SEC-1 | STY-1 | TST-1 | DOC-1",
+      "severity": "critical | high | medium | low",
+      "confidence": "high | medium | low",
+      "file": "sample-project/auth.py",
+      "line": 21,
+      "symbol": "current_user_id",
+      "in_diff": true,
+      "title": "One line, under 80 chars, states the defect",
+      "why": "2-3 sentences. What breaks, and the concrete path to it.",
+      "evidence": "The exact offending line(s), verbatim from the file.",
+      "fix": "The specific change. Show code when it is under 6 lines.",
+      "rule": "Style guide rule number, CWE id, or null"
+    }
+  ],
+  "summary": {
+    "files_reviewed": 0,
+    "findings_by_severity": { "critical": 0, "high": 0, "medium": 0, "low": 0 },
+    "clean": ["files or areas checked and found acceptable"],
+    "not_checked": ["anything skipped, and why"]
+  }
+}

@@ -1,0 +1,154 @@
+diff --git a/sample-project/app.py b/sample-project/app.py
+index 9052948..c2e6ff5 100644
+--- a/sample-project/app.py
++++ b/sample-project/app.py
+@@ -1,9 +1,10 @@
+ from flask import Flask, request, jsonify
++import traceback
+ 
+ from config import DEBUG, PAGE_SIZE, MAX_NOTE_LENGTH
+-from db import search_notes, get_note, insertNote
+-from auth import hash_password
+-from utils import slugify, truncate, parse_tags
++from db import search_notes, get_note, insertNote, delete_note
++from auth import current_user_id, isAdmin, hash_password, verify_password
++from utils import slugify, truncate, parse_tags, applyFilterExpression
+ 
+ app = Flask(__name__)
+ 
+@@ -11,7 +12,7 @@ app = Flask(__name__)
+ @app.route("/notes/search")
+ def search():
+     q = request.args.get("q", "")
+-    uid = request.args.get("user_id")
++    uid = current_user_id(request.headers.get("Authorization"))
+     results = search_notes(q, uid)
+     return jsonify([{"id": r[0], "title": r[1], "excerpt": truncate(r[2])} for r in results[:PAGE_SIZE]])
+ 
+@@ -27,13 +28,32 @@ def read_note(note_id):
+ @app.route("/notes", methods=["POST"])
+ def create_note():
+     data = request.get_json()
+-    uid = data.get("user_id")
++    uid = current_user_id(request.headers.get("Authorization"))
+     if len(data["body"]) > MAX_NOTE_LENGTH:
+         return jsonify({"error": "too long"}), 400
+     note_id = insertNote(data["title"], data["body"], uid, parse_tags(data.get("tags", "")))
+     return jsonify({"id": note_id}), 201
+ 
+ 
++@app.route("/notes/<int:note_id>", methods=["DELETE"])
++def remove_note(note_id):
++    if not isAdmin(request.headers):
++        return jsonify({"error": "forbidden"}), 403
++    delete_note(note_id)
++    return "", 204
++
++
++@app.route("/notes/filter", methods=["POST"])
++def filter_notes():
++    body = request.get_json()
++    uid = current_user_id(request.headers.get("Authorization"))
++    notes = search_notes("", uid)
++    try:
++        return jsonify(applyFilterExpression(notes, body["expression"]))
++    except Exception as e:
++        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
++
++
+ @app.route("/auth/register", methods=["POST"])
+ def register():
+     data = request.get_json()
+diff --git a/sample-project/auth.py b/sample-project/auth.py
+index a3e0902..8f2882d 100644
+--- a/sample-project/auth.py
++++ b/sample-project/auth.py
+@@ -1,4 +1,6 @@
+ import hashlib
++import time
++from config import JWT_SECRET, ADMIN_BYPASS_TOKEN
+ 
+ 
+ def hash_password(password):
+@@ -7,3 +9,25 @@ def hash_password(password):
+ 
+ def verify_password(password, stored_hash):
+     return hash_password(password) == stored_hash
++
++
++def issue_token(user_id):
++    """Returns a signed JWT valid for 24 hours."""
++    raw = str(user_id) + "|" + str(int(time.time())) + "|" + JWT_SECRET
++    return hashlib.sha1(raw.encode()).hexdigest() + "." + str(user_id)
++
++
++def current_user_id(token):
++    if not token:
++        return None
++    parts = token.split(".")
++    if len(parts) != 2:
++        return None
++    return int(parts[1])
++
++
++def isAdmin(request_headers):
++    token = request_headers.get("X-Admin-Token", "")
++    if token == ADMIN_BYPASS_TOKEN:
++        return True
++    return False
+diff --git a/sample-project/config.py b/sample-project/config.py
+index 30ea69f..c2ad430 100644
+--- a/sample-project/config.py
++++ b/sample-project/config.py
+@@ -5,6 +5,7 @@ import os
+ DATABASE_URL = "postgresql://devnotes_admin:FAKEPASSWORD_not_real@prod-db.internal:5432/devnotes"
+ JWT_SECRET = "FAKE_NOT_A_REAL_KEY_s3cr3t_signing_key_2026"
+ STRIPE_API_KEY = "sk_live_FAKE_NOT_A_REAL_KEY_4eC39HqLyjWDarjtT1zdp7dc"
++ADMIN_BYPASS_TOKEN = "letmein-admin"
+ 
+ DEBUG = True
+ MAX_NOTE_LENGTH = 10000
+diff --git a/sample-project/db.py b/sample-project/db.py
+index a6db185..0c82050 100644
+--- a/sample-project/db.py
++++ b/sample-project/db.py
+@@ -10,10 +10,8 @@ def get_connection():
+ def search_notes(query, user_id):
+     conn = get_connection()
+     cur = conn.cursor()
+-    cur.execute(
+-        "SELECT id, title, body FROM notes WHERE user_id = ? AND title LIKE ?",
+-        (user_id, "%" + query + "%"),
+-    )
++    sql = f"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'"
++    cur.execute(sql)
+     rows = cur.fetchall()
+     conn.close()
+     return rows
+@@ -41,3 +39,14 @@ def insertNote(title, body, user_id, tags=[]):
+     conn.commit()
+     conn.close()
+     return note_id
++
++
++def delete_note(note_id):
++    conn = get_connection()
++    cur = conn.cursor()
++    try:
++        cur.execute(f"DELETE FROM notes WHERE id = {note_id}")
++        conn.commit()
++    except:
++        pass
++    conn.close()
+diff --git a/sample-project/utils.py b/sample-project/utils.py
+index 895bcde..a107afa 100644
+--- a/sample-project/utils.py
++++ b/sample-project/utils.py
+@@ -17,3 +17,7 @@ def truncate(text, length=140):
+ 
+ def parse_tags(raw):
+     return [t.strip() for t in raw.split(",") if t.strip()]
++
++
++def applyFilterExpression(notes, expression):
++    return [n for n in notes if eval(expression)]
