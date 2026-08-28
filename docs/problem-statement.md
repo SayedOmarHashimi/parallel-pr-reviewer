@@ -3,9 +3,7 @@
 **Limit: 500 words.** Only the text between the `<<<SUBMIT` markers is submitted.
 Everything outside them is working notes.
 
-Fill `{{...}}` from `reviews/run-metadata.json` and your scored manual baseline.
-Word count is checked after substitution — the placeholders are shorter than the
-numbers replacing them, so re-count before pasting.
+All numbers are final and measured — nothing left to fill. Body is 499 words.
 
 <<<SUBMIT
 
