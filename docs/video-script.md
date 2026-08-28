@@ -45,6 +45,71 @@ is more credible than a suspiciously clean sweep, and judges scoring
 
 ---
 
+## Screen layout
+
+Record **one fixed region** for the entire video: Bob IDE filling the top ~85% of
+the frame, a short terminal strip pinned along the bottom. Never app-switch and
+never resize mid-take — a frame that changes shape between cuts reads as sloppy,
+and the upload re-encode makes it worse.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Bob IDE                                                 │
+│  ┌──────────┬───────────────────────┬─────────────────┐  │
+│  │ Explorer │  Editor               │  Bob panel      │  │
+│  │          │                       │  (Modes /       │  │
+│  │ reviews/ │  whatever the current │   Agent mode /  │  │
+│  │   raw/   │  beat needs open      │   Tasks)        │  │
+│  └──────────┴───────────────────────┴─────────────────┘  │
+├──────────────────────────────────────────────────────────┤
+│  terminal — ELAPSED  01:24                               │
+└──────────────────────────────────────────────────────────┘
+```
+
+Three regions, three jobs. **Explorer** left, pinned to `reviews/` so the JSON
+files visibly appear during the run. **Editor** centre, the only thing you change
+between beats. **Bob panel** right, switching Modes → Agent mode → Tasks. The
+terminal strip only ever holds the stopwatch.
+
+### The stopwatch
+
+Run this in the bottom strip before you start. It is what makes "under three
+minutes" a thing the viewer watches rather than a thing you assert:
+
+```bash
+s=$(date +%s); while :; do e=$(( $(date +%s)-s )); printf "\r  ELAPSED  %02d:%02d" $((e/60)) $((e%60)); sleep 1; done
+```
+
+Terminal font at 24pt or larger, and `Ctrl-C` to stop it. Start it at the moment
+you submit the orchestrator prompt, not before.
+
+### What is in the editor, beat by beat
+
+| Beat | Editor shows | Bob panel shows |
+|---|---|---|
+| 0:00 problem | `pr/PR-1.diff`, scrolling | anything, not the focus |
+| 0:20 the idea | — | **Modes**, all four visible |
+| 0:35 dispatch | `bob-config/orchestrator.md` | **Agent mode**, prompt pasted |
+| 0:50 parallel run | — | **Tasks**, four running · *hero shot* |
+| 1:05 cutaway | `bob-config/style-guide.md` (3s) | Tasks, still running behind |
+| 1:15 output | `reviews/raw/security.json` | Tasks, completing |
+| 1:35 synthesis | `reviews/PR-1-review.md` being written | Agent mode |
+| 1:55 findings | `reviews/PR-1-review.md`, **rendered preview** | — |
+| 2:35 impact | `metrics/manual-baseline.md` split with the review | — |
+
+Read the final review as **rendered markdown**, not raw source. The consolidated
+review is a designed artifact — severity headings, per-finding reviewer tags — and
+raw `##` and backticks throw that away in the one shot where it matters.
+
+### Before you hit record
+
+- **Do Not Disturb on.** One Slack toast over the Tasks panel costs you a take.
+- **Hide the Dock** (`⌥⌘D`) and clear the menu bar of anything identifying.
+- Editor at **160%+**, terminal at **24pt+**.
+- Empty `reviews/raw/` — the files must appear on camera, not sit there pre-made.
+- Pre-open every file listed above in its own tab, in beat order, left to right.
+  You should never search for a file on camera.
+
 ## Script
 
 ### 0:00 – 0:20 · The problem (20s)
