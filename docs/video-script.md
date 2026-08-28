@@ -1,6 +1,7 @@
 # Video demo script — Parallel PR Reviewer
 
-**Hard limit: 3:00.** Target 2:52 so an upload re-encode can't push you over.
+**Hard limit: 3:00.** Target 2:57. If a take runs over, cut in this order:
+the style-guide cutaway at 1:05 (−3s), then the dispatch hold at 0:35 (−5s).
 Requirement: 90+ seconds of the solution working live, narrated, with Bob visibly
 doing the work.
 
@@ -12,16 +13,22 @@ Every `{{...}}` below comes from a real run. Do not estimate any of them on came
 
 | Placeholder | Source |
 |---|---|
-| `{{MANUAL_MINUTES}}` | Your timed manual review of `pr/PR-42.diff` |
-| `{{MANUAL_FOUND}}` | Issues you found manually, scored vs `metrics/answer-key.md` |
+| `{{MANUAL_MINUTES}}` | Timed manual write-up of `pr/PR-1.diff` — see the baseline note below |
+| `{{MANUAL_FOUND}}` | Defects written up manually, scored vs `metrics/answer-key.md` |
 | `{{BOB_TIME}}` | `run-metadata.json` → `wall_clock_seconds` |
 | `{{BOB_FOUND}}` | `run-metadata.json` → `findings_after_dedupe` |
 | `{{PLANTED}}` | 13 (diff-scoped) — already known |
 | `{{CRITICAL_NAME}}` | The critical finding you'll spotlight (expected: the token identity bug) |
 
-If Bob finds fewer than you did manually, **say that instead**. A demo that reports
-a real mixed result is more credible than one that reports a suspiciously clean
-sweep, and judges scoring "effectiveness" have seen a lot of the latter.
+**On the baseline.** If a cold reviewer did it, say so and compare directly. If
+you did it yourself, you knew every defect in advance — so your time is a *floor*
+on manual review and your find count is a *ceiling*, both biased against Bob.
+Disclose it in one sentence on camera. A metric that leans against your own
+product is the kind people believe.
+
+If Bob finds fewer than the manual pass, **say that instead**. A real mixed result
+is more credible than a suspiciously clean sweep, and judges scoring
+"effectiveness" have seen a lot of the latter.
 
 ---
 
@@ -31,18 +38,83 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 - [ ] Editor theme: high contrast. Default dark themes lose thin syntax colors on re-encode.
 - [ ] Close every unrelated panel, tab, notification, and Slack.
 - [ ] `reviews/raw/` **emptied** — the files must appear on camera, not sit there pre-made.
-- [ ] `pr/PR-42.diff`, `orchestrator.md`, and the Modes panel each pre-opened in a tab so you never hunt for a file mid-take.
+- [ ] `pr/PR-1.diff`, `orchestrator.md`, and the Modes panel each pre-opened in a tab so you never hunt for a file mid-take.
 - [ ] Screen recording at 1080p minimum.
 - [ ] **Scrub for credentials:** no IBM Cloud account id, no API key, no email in any visible panel, title bar, or notification.
 - [ ] Do a silent dry run of the click path once. The demo must not be the first time you click it.
 
 ---
 
+## Screen layout
+
+Record **one fixed region** for the entire video: Bob IDE filling the top ~85% of
+the frame, a short terminal strip pinned along the bottom. Never app-switch and
+never resize mid-take — a frame that changes shape between cuts reads as sloppy,
+and the upload re-encode makes it worse.
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  Bob IDE                                                 │
+│  ┌──────────┬───────────────────────┬─────────────────┐  │
+│  │ Explorer │  Editor               │  Bob panel      │  │
+│  │          │                       │  (Modes /       │  │
+│  │ reviews/ │  whatever the current │   Agent mode /  │  │
+│  │   raw/   │  beat needs open      │   Tasks)        │  │
+│  └──────────┴───────────────────────┴─────────────────┘  │
+├──────────────────────────────────────────────────────────┤
+│  terminal — ELAPSED  01:24                               │
+└──────────────────────────────────────────────────────────┘
+```
+
+Three regions, three jobs. **Explorer** left, pinned to `reviews/` so the JSON
+files visibly appear during the run. **Editor** centre, the only thing you change
+between beats. **Bob panel** right, switching Modes → Agent mode → Tasks. The
+terminal strip only ever holds the stopwatch.
+
+### The stopwatch
+
+Run this in the bottom strip before you start. It is what makes "under three
+minutes" a thing the viewer watches rather than a thing you assert:
+
+```bash
+s=$(date +%s); while :; do e=$(( $(date +%s)-s )); printf "\r  ELAPSED  %02d:%02d" $((e/60)) $((e%60)); sleep 1; done
+```
+
+Terminal font at 24pt or larger, and `Ctrl-C` to stop it. Start it at the moment
+you submit the orchestrator prompt, not before.
+
+### What is in the editor, beat by beat
+
+| Beat | Editor shows | Bob panel shows |
+|---|---|---|
+| 0:00 problem | `pr/PR-1.diff`, scrolling | anything, not the focus |
+| 0:20 the idea | — | **Modes**, all four visible |
+| 0:35 dispatch | `bob-config/orchestrator.md` | **Agent mode**, prompt pasted |
+| 0:50 parallel run | — | **Tasks**, four running · *hero shot* |
+| 1:05 cutaway | `bob-config/style-guide.md` (3s) | Tasks, still running behind |
+| 1:15 output | `reviews/raw/security.json` | Tasks, completing |
+| 1:35 synthesis | `reviews/PR-1-review.md` being written | Agent mode |
+| 1:55 findings | `reviews/PR-1-review.md`, **rendered preview** | — |
+| 2:35 impact | `metrics/manual-baseline.md` split with the review | — |
+
+Read the final review as **rendered markdown**, not raw source. The consolidated
+review is a designed artifact — severity headings, per-finding reviewer tags — and
+raw `##` and backticks throw that away in the one shot where it matters.
+
+### Before you hit record
+
+- **Do Not Disturb on.** One Slack toast over the Tasks panel costs you a take.
+- **Hide the Dock** (`⌥⌘D`) and clear the menu bar of anything identifying.
+- Editor at **160%+**, terminal at **24pt+**.
+- Empty `reviews/raw/` — the files must appear on camera, not sit there pre-made.
+- Pre-open every file listed above in its own tab, in beat order, left to right.
+  You should never search for a file on camera.
+
 ## Script
 
 ### 0:00 – 0:20 · The problem (20s)
 
-**On screen:** `pr/PR-42.diff` open, scrolling slowly.
+**On screen:** `pr/PR-1.diff` open, scrolling slowly.
 
 > "This is a 67-line pull request. To review it properly I have to check four
 > different things — is it secure, does it follow our style guide, is it tested,
@@ -91,7 +163,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 #### 1:35 – 1:55 · Synthesis
 
-**On screen:** Agent mode merging; `reviews/PR-42-review.md` being written.
+**On screen:** Agent mode merging; `reviews/PR-1-review.md` being written.
 
 > "Then Agent mode merges all four. It deduplicates — two reviewers flagged the
 > same swallowed exception — ranks by severity, and every finding keeps the name
@@ -99,7 +171,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 #### 1:55 – 2:25 · The findings — *land the specific one*
 
-**On screen:** `PR-42-review.md`, scroll to the top finding, then to the docs finding.
+**On screen:** `PR-1-review.md`, scroll to the top finding, then to the docs finding.
 
 > "Here's the one I want to show you. This PR adds token authentication. The token
 > is a hash, then a dot, then the user's ID — and the code trusts the ID without
@@ -119,14 +191,15 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 ---
 
-### 2:35 – 2:52 · Impact and close (17s)
+### 2:35 – 2:57 · Impact and close (22s)
 
-**On screen:** Split — your manual notes beside `PR-42-review.md`.
+**On screen:** Split — `metrics/manual-baseline.md` beside `PR-1-review.md`.
 
-> "I reviewed this same PR by hand first. {{MANUAL_MINUTES}} minutes,
-> {{MANUAL_FOUND}} of the {{PLANTED}} real issues. Bob's four parallel agents:
-> {{BOB_TIME}}, {{BOB_FOUND}}. Same reviewer, same PR — the difference is that
-> four specialists read it instead of one tired generalist reading it four times."
+> "I built this codebase — I knew every defect going in. Writing up a complete
+> four-concern review still took me {{MANUAL_MINUTES}} minutes. That's a floor,
+> not an average. IBM Bob's four parallel agents, with no prior knowledge:
+> {{BOB_TIME}}, {{BOB_FOUND}} of {{PLANTED}}. Four specialists read this PR
+> instead of one generalist reading it four times."
 
 **End card:** repo URL.
 

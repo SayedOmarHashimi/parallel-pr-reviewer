@@ -31,8 +31,12 @@ synthesize their four reports into one consolidated, paste-ready PR review.
 | | Manual review | Bob parallel review |
 |---|---|---|
 | Wall-clock time | _TBD_ | _TBD_ |
-| Issues found | _TBD_ | _TBD_ |
-| Critical security issues found | _TBD_ | _TBD_ |
+| Defects written up (of 13 catalogued in the diff) | _TBD_ | _TBD_ |
+| Prior knowledge of the defects | _see below_ | none |
+
+The manual baseline protocol, including how the reviewer's prior knowledge is
+accounted for, is in [`metrics/manual-baseline.md`](metrics/manual-baseline.md).
+Defects are scored against an audited list of 13 in the PR diff.
 
 ## Repository layout
 

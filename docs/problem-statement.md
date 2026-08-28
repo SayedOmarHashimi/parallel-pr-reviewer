@@ -24,8 +24,8 @@ nothing more principled than what the reviewer noticed first. Security review, t
 one with the worst failure mode, is routinely the pass that gets cut when the
 release is waiting.
 
-This is a poor fit for one reviewer and an excellent fit for four specialists. Teams
-don't staff four specialists per PR because it is not economically possible.
+This is a poor fit for one reviewer and a good fit for four specialists — which
+teams don't staff, because it isn't economically possible.
 
 ### The solution
 
@@ -41,14 +41,14 @@ list of concerns that are *not* its job:
 - **docs-reviewer** — missing documentation, and documentation that is actively wrong
 
 The style reviewer carries no built-in rules. It reads the team's style guide — a
-real, numbered policy document in the repository — and must cite the clause it is
-enforcing on every finding. Swapping in a different team's guide changes the
-agent's behavior with no prompt changes.
+numbered policy document in the repository — and cites the clause it enforces on
+every finding. Swapping in another team's guide changes its behavior with no
+prompt edits.
 
-All four emit findings against one JSON schema. Bob's Agent mode then merges them:
+All four emit findings against one JSON schema. Bob's Agent mode merges them:
 deduplicating issues found by more than one reviewer, ranking by severity, and
-preserving which subagent produced each finding. The output is a consolidated
-review formatted to paste directly into GitHub.
+preserving which subagent produced each finding. The output pastes directly into
+GitHub.
 
 ### Measured impact
 
@@ -58,16 +58,19 @@ defects:
 | | Manual review | Bob parallel review |
 |---|---|---|
 | Wall clock | {{MANUAL_MINUTES}} min | {{BOB_TIME}} |
-| Defects found | {{MANUAL_FOUND}} | {{BOB_FOUND}} |
+| Defects written up | {{MANUAL_FOUND}} of {{PLANTED}} | {{BOB_FOUND}} of {{PLANTED}} |
+| Prior knowledge of the defects | full | none |
 
-The findings the manual pass missed were the expensive kind: an authentication
-token whose user identity is trusted without verification, and a docstring
-promising security properties the function does not implement. Neither is visible
-to a linter; both look like ordinary code.
+The manual pass was run by the fixture's author, who knew every defect in advance
+— making its time a floor rather than an average, and its find count a ceiling.
+Both biases run against the tool being measured.
 
-The architecture scales without reconfiguration. The same four subagents run
-against a full repository instead of a diff, and adding a fifth concern —
-accessibility, licensing, performance — means writing one more mode definition, not
-redesigning the review.
+The expensive defects are the ones that don't look like defects: a token whose
+user identity is trusted without verification, and a docstring promising security
+properties the function never implements. Neither is visible to a linter.
+
+The architecture scales without reconfiguration: the same subagents run against a
+whole repository instead of a diff, and adding a fifth concern — accessibility,
+licensing, performance — means one more mode definition, not a redesign.
 
 SUBMIT>>>

@@ -1,0 +1,43 @@
+## Method
+
+For every public function, class, and route in the diff:
+
+1. **Read the body and state what it actually does**, in one sentence, to yourself.
+2. Read the docstring, if any.
+3. Compare. Every claim in the docstring must be verifiable in the body.
+
+Check specifically for claims about: return type and shape, expiry and lifetime,
+signing/encryption/validation, side effects, what is raised, units, and mutation
+of arguments. These are the claims that silently drift.
+
+Also check: does the PR change behavior without updating the docstring that
+described the old behavior? A stale docstring becomes a wrong docstring the moment
+the code moves.
+
+## Severity rubric
+
+- **high** — a docstring makes a false claim a caller would rely on for
+  correctness or security.
+- **medium** — a public API function or route handler with no docstring; a
+  docstring that omits a material side effect or raised exception.
+- **low** — a private helper with no docstring; a thin docstring that merely
+  restates the function name.
+
+## Rules
+
+- **Quote the false claim.** For a wrong docstring, `evidence` holds the docstring
+  line verbatim and `why` states what the code does instead, citing the line that
+  proves it.
+- **Do not write the docs for them at length.** `fix` gives a corrected one-line
+  summary, not a full rewritten docstring.
+- **Group the boilerplate.** If nine functions in a module all lack docstrings,
+  file one finding listing them, not nine findings. Save the individual findings
+  for docstrings that lie.
+- **Route handlers count as public API.** They are the surface other teams consume.
+
+## Output
+
+Write `reviews/raw/docs.json`, conforming exactly to
+`bob-config/finding-schema.json`. Use ids `DOC-1`, `DOC-2`, … Order wrong-docstring
+findings before missing-docstring findings regardless of severity. Emit nothing to
+stdout except the path you wrote.

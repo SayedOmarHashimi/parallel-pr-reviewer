@@ -5,7 +5,7 @@ Listed in `.bobignore`. It exists so you can score Bob's recall honestly
 
 **24 issues planted.** The `Scope` column matters:
 
-- **PR** — introduced or modified by PR #42. A diff-scoped review should catch these.
+- **PR** — introduced or modified by PR #1. A diff-scoped review should catch these.
 - **repo** — pre-existing on `main`. Only a whole-repo scan finds these.
 
 That split is itself a demo beat: run the subagents against the diff, then against
@@ -67,7 +67,7 @@ Score it under whichever category Bob files it; style and security both own it.*
 
 Fill in after the Bob run.
 
-**Diff-scoped pass** (PR #42 only — 13 planted: S4 S5 S6 S8 S9 S10 S11 S13, C3 C4, T1 T2, D1)
+**Diff-scoped pass** (PR #1 only — 13 planted: S4 S5 S6 S8 S9 S10 S11 S13, C3 C4, T1 T2, D1)
 
 | Category | Planted | Manual review caught | Bob caught |
 |---|---|---|---|

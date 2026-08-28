@@ -1,4 +1,4 @@
-# PR #42 — Add saved filters and admin note deletion
+# PR #1 — Add saved filters and admin note deletion
 
 **Branch:** `pr/saved-filters-and-admin-delete` → `main`
 **Author:** @devnotes-contributor

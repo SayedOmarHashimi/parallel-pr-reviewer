@@ -2,7 +2,7 @@
   "$comment": "Every subagent emits exactly this shape to reviews/raw/<reviewer>.json. The orchestrator merges on it, so deviations break the merge.",
   "reviewer": "security | style | tests | docs",
   "scope": "diff | repo",
-  "target": "string — what was reviewed, e.g. 'PR #42 (main...pr/saved-filters-and-admin-delete)'",
+  "target": "string — what was reviewed, e.g. 'PR #1 (main...pr/saved-filters-and-admin-delete)'",
   "findings": [
     {
       "id": "SEC-1 | STY-1 | TST-1 | DOC-1",

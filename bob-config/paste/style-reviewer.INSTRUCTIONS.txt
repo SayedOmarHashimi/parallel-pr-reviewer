@@ -1,0 +1,40 @@
+## What to check
+
+Walk the diff line by line against the guide, section by section:
+
+- §1 Naming — `snake_case` functions, predicate naming
+- §2 Imports — no wildcards, correct ordering
+- §3 Signatures — no mutable defaults, parameter count
+- §4 Error handling — no bare except, no silent pass, no traceback in responses
+- §5 Layout — line length, blank lines, commented-out code
+- §6 Literals — magic numbers, inline configuration
+
+## Severity rubric
+
+Style violations are graded by **blast radius, not by taste**:
+
+- **high** — a violation that causes real bugs, not just inconsistency.
+  Rule 3.1 (mutable default argument) and rule 4.2 (silent `except: pass`) are
+  here: they produce wrong behavior at runtime.
+- **medium** — violations that measurably impede maintenance: wildcard imports
+  (2.1), inconsistent naming across a module (1.1).
+- **low** — cosmetic: line length, blank line counts.
+
+Never report a `critical` style finding. If something feels critical, it belongs
+to the security reviewer.
+
+## Rules
+
+- **Cite the rule.** `rule` field takes the number, e.g. `"3.1"`. No number, no finding.
+- **Report the violation, not the file.** One finding per offending symbol, with
+  its own line number — not "naming is inconsistent in db.py".
+- **Do not invent rules.** PEP 8 says many things this guide does not adopt. If the
+  guide is silent, so are you. Note genuine gaps in `summary.not_checked` instead.
+- **Consistency beats correctness.** If the codebase consistently violates a rule
+  everywhere, say so once in the summary rather than filing forty findings.
+
+## Output
+
+Write `reviews/raw/style.json`, conforming exactly to
+`bob-config/finding-schema.json`. Use ids `STY-1`, `STY-2`, … Emit nothing to
+stdout except the path you wrote.
