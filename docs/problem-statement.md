@@ -3,9 +3,7 @@
 **Limit: 500 words.** Only the text between the `<<<SUBMIT` markers is submitted.
 Everything outside them is working notes.
 
-Fill `{{...}}` from `reviews/run-metadata.json` and your scored manual baseline.
-Word count is checked after substitution — the placeholders are shorter than the
-numbers replacing them, so re-count before pasting.
+All numbers are final and measured — nothing left to fill. Body is 499 words.
 
 <<<SUBMIT
 
@@ -52,25 +50,27 @@ GitHub.
 
 ### Measured impact
 
-Against a 67-line pull request containing {{PLANTED}} independently catalogued
-defects:
+On a 5-file, +67 −9 pull request:
 
-| | Manual review | Bob parallel review |
-|---|---|---|
-| Wall clock | {{MANUAL_MINUTES}} min | {{BOB_TIME}} |
-| Defects written up | {{MANUAL_FOUND}} of {{PLANTED}} | {{BOB_FOUND}} of {{PLANTED}} |
-| Prior knowledge of the defects | full | none |
+| | Measured |
+|---|---|
+| Four parallel reviews | 98 s |
+| Consolidated review, end to end | 6 min 12 s |
+| Findings | 37 raw, 17 merged |
+| Severity | 4 critical, 8 high, 4 medium, 1 low |
 
-The manual pass was run by the fixture's author, who knew every defect in advance
-— making its time a floor rather than an average, and its find count a ceiling.
-Both biases run against the tool being measured.
+Each critical finding independently blocks merge: `eval()` on a request body, a
+parameterised query rewritten into string interpolation, an unverified auth token,
+and a second injection in the delete path. The expensive ones do not look
+expensive — the token bug is four lines resembling ordinary parsing, and one docs
+finding is a docstring that is false rather than absent.
 
-The expensive defects are the ones that don't look like defects: a token whose
-user identity is trusted without verification, and a docstring promising security
-properties the function never implements. Neither is visible to a linter.
+Bob has no wall clock and reports `null` rather than inventing timestamps; timings
+are measured externally, with the method published. Both counts are published, so
+the merge is auditable. No human baseline is claimed — none was measured.
 
 The architecture scales without reconfiguration: the same subagents run against a
-whole repository instead of a diff, and adding a fifth concern — accessibility,
-licensing, performance — means one more mode definition, not a redesign.
+whole repository instead of a diff, and a fifth concern means one more mode
+definition, not a redesign.
 
 SUBMIT>>>

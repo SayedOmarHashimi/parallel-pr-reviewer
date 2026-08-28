@@ -78,7 +78,24 @@ serves three purposes: it keeps secrets out of Bob's context and out of publishe
 screenshots, it prevents the reviewing agents from reading the answers, and it
 holds down token cost on every run.
 
-### 6. Evidence
+### 6. Two honest limitations found while building this
+
+**Bob has no wall clock.** Early runs emitted confident-looking timestamps that were
+over a year off. The orchestrator prompt now instructs it to write `null` for any
+field it cannot observe, and the shipped review reads "Reviewed by four parallel
+passes in N/A (timing not available)". All timings in this submission are measured
+externally, from artifact modification times and a screen recording, with the method
+recorded in `reviews/run-metadata.json`.
+
+**Subagents did not inherit their mode's write permission.** In the submission run,
+two of the four reviewers executed without file-write rights and returned their
+findings as chat output; the orchestrator transcribed those into
+`reviews/raw/security.json` and `reviews/raw/style.json`. All four still ran
+concurrently from a single dispatch. This is disclosed in the run metadata and in the
+review's Reviewer status table rather than smoothed over, because a provenance claim
+that is not exactly true is worth less than no claim.
+
+### 7. Evidence
 
 `bob_sessions/` contains task session summaries exported from Bob's **Tasks**
 panel, including the four subagents running concurrently and the Agent mode

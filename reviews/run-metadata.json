@@ -1,0 +1,49 @@
+{
+  "target": "PR #1 (main...pr/saved-filters-and-admin-delete)",
+  "scope": "diff",
+  "started_at": null,
+  "finished_at": null,
+  "wall_clock_seconds": null,
+  "subagents": [
+    {
+      "name": "security-reviewer",
+      "status": "ok_transcribed",
+      "seconds": null,
+      "findings": 10,
+      "provenance": "Ran and produced findings, but executed without edit rights and could not write its file. Output transcribed into security.json by the orchestrator."
+    },
+    {
+      "name": "style-reviewer",
+      "status": "ok_transcribed",
+      "seconds": null,
+      "findings": 9,
+      "provenance": "Same as security-reviewer: ran, produced findings, could not write. Transcribed into style.json by the orchestrator."
+    },
+    {
+      "name": "test-coverage-reviewer",
+      "status": "ok",
+      "seconds": null,
+      "findings": 10,
+      "provenance": "Wrote tests.json directly."
+    },
+    {
+      "name": "docs-reviewer",
+      "status": "ok",
+      "seconds": null,
+      "findings": 8,
+      "provenance": "Wrote docs.json directly."
+    }
+  ],
+  "findings_before_dedupe": 37,
+  "findings_after_dedupe": 17,
+  "by_severity": {
+    "critical": 4,
+    "high": 8,
+    "medium": 4,
+    "low": 1
+  },
+  "verdict": "Request changes",
+  "provenance_caveat": "Two of the four subagents (security, style) were dispatched without file-write permission and returned their findings as chat output; the orchestrator transcribed those into security.json and style.json. tests.json and docs.json were written directly by their subagents. All four subagents did execute concurrently \u2014 see parallelism_evidence \u2014 but the raw files for security and style are second-hand and should not be cited as direct agent output.",
+  "parallelism_evidence": "Video frame at t=175s shows all four subagent cards from a single dispatch with durations 6s / 1m21s / 1m38s / 1m38s, confirming concurrent execution with staggered completion.",
+  "dedupe_note": "37 findings before dedupe, 17 after. 20 collapsed into 9 merged entries under the orchestrator's file+symbol rule, with every reviewer's reason preserved inside the merged finding. Report 17 as the finding count and 37 as the pre-merge total; both are in this file."
+}
