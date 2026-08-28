@@ -100,9 +100,21 @@ Write `reviews/run-metadata.json`:
 }
 ```
 
-These are the numbers behind the impact claim. Report the wall clock honestly —
-the parallel run's elapsed time is from dispatch to the **last** subagent
-finishing, not the sum of the four, and not the fastest one.
+**You do not have a wall clock.** You cannot read the system time, and any
+timestamp you produce from memory will be wrong — earlier runs of this
+orchestrator emitted `2025-07-15`, which is over a year off. Therefore:
+
+- Set `started_at`, `finished_at`, and `wall_clock_seconds` to `null`.
+- Do **not** substitute a plausible-looking date, and do not estimate a duration.
+- Same for each subagent's `seconds` field: `null`, not a guess.
+
+Timing is measured outside this session, from artifact modification times and the
+screen recording. A fabricated number there would invalidate the entire impact
+claim, which is the one thing this whole exercise cannot survive. `null` is the
+correct, honest answer for a field you cannot observe.
+
+Report counts honestly too — findings are things you can actually count, so those
+are real numbers, and `findings_after_dedupe` is the figure that gets reported.
 
 ## Rules for you, the orchestrator
 
