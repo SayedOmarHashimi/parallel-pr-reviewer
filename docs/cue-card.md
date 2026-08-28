@@ -7,11 +7,10 @@ and cut the bad take out later. Aim for ~6 minutes raw; you'll trim to under 3:0
 
 **1. THE DIFF** — tab: `pr/PR-1.diff`, scroll slowly
 
-> "This is a sixty-seven line pull request. To review it properly I have to check
-> four different things — is it secure, does it follow our style guide, is it
-> tested, is it documented. I check them one after another, in my head, and by the
-> fourth one I'm skimming. That's twenty to forty minutes, and the last thing I
-> check is the thing I miss."
+> "This is a sixty-seven line pull request. Reviewing it properly means checking
+> four different things — is it secure, does it follow the style guide, is it
+> tested, is it documented. One reviewer does them one after another, in one head,
+> under deadline pressure. And the concern you check last is the one you skim."
 
 ---
 
@@ -66,13 +65,19 @@ and cut the bad take out later. Aim for ~6 minutes raw; you'll trim to under 3:0
 
 ---
 
-**8. CLOSE** — `reviews/run-metadata.json` beside the review
+**8. CLOSE** — record this LAST, after the run finishes and I give you the numbers
 
-> "Four specialist reviews, dispatched together, done in ninety-eight seconds. Full
-> consolidated review in six minutes. Thirty-seven findings merged to seventeen —
-> four critical, each one a merge blocker. And notice the timing field reads null:
-> IBM Bob has no clock, so it won't report a number it can't measure. Everything
-> you just saw was measured outside the agent."
+> "Four specialist reviews, dispatched together, done in ___ seconds. Full
+> consolidated review in ___. ___ findings merged down to ___ — ___ of them
+> critical, each one independently a merge blocker. And notice the timing field
+> reads null: IBM Bob has no clock, so it won't report a number it can't measure.
+> Everything you just saw was measured outside the agent."
+
+**The blanks are deliberate.** The run you do on camera produces its own numbers and
+overwrites `run-metadata.json`. Narrating run 3's figures over a different run's file
+would be wrong. So: record beats 1–7 continuously, let the run finish, send me the
+result, and I'll give you the real numbers to read for beat 8 as a short separate
+clip you append in iMovie.
 
 ---
 
