@@ -1,0 +1,24 @@
+{
+  "target": "PR #42 (main...pr/saved-filters-and-admin-delete)",
+  "scope": "diff",
+  "started_at": "2025-07-15T00:00:00Z",
+  "finished_at": "2025-07-15T00:01:00Z",
+  "wall_clock_seconds": 60,
+  "subagents": [
+    {"name": "security-reviewer", "status": "ok", "seconds": 15, "findings": 9},
+    {"name": "style-reviewer",    "status": "ok", "seconds": 15, "findings": 11},
+    {"name": "test-coverage-reviewer", "status": "ok", "seconds": 15, "findings": 9},
+    {"name": "docs-reviewer",     "status": "ok", "seconds": 15, "findings": 8}
+  ],
+  "findings_before_dedupe": 37,
+  "findings_after_dedupe": 35,
+  "by_severity": {"critical": 4, "high": 6, "medium": 7, "low": 2},
+  "verdict": "Request changes",
+  "schema_repairs": [
+    "style.json: top-level key 'violations' renamed to 'findings'; extra non-schema keys 'review_id', 'pr', 'style_guide' noted but retained",
+    "tests.json: bare array wrapped in schema-compliant object envelope",
+    "docs.json: bare array wrapped in schema-compliant object envelope",
+    "style.json STY-4/STY-5: line corrected from 94 (diff offset) to 29 (actual file line)",
+    "style.json STY-11: line corrected from 153 (diff offset) to 22 (actual file line)"
+  ]
+}

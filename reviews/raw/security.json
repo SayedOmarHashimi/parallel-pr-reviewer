@@ -1,0 +1,153 @@
+{
+  "reviewer": "security",
+  "scope": "diff",
+  "target": "PR #42 (main...pr/saved-filters-and-admin-delete)",
+  "findings": [
+    {
+      "id": "SEC-1",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/utils.py",
+      "line": 23,
+      "symbol": "applyFilterExpression",
+      "in_diff": true,
+      "title": "eval() on user-supplied filter expression allows full RCE",
+      "why": "The `expression` value comes directly from the POST body sent by any authenticated caller and is passed without any sanitisation to Python's built-in `eval()`. An attacker can execute arbitrary OS commands (e.g. `__import__('os').system('...')`) or read the filesystem with no additional privileges. Because authentication itself is broken (see SEC-3), this endpoint is reachable without valid credentials.",
+      "evidence": "return [n for n in notes if eval(expression)]",
+      "fix": "Remove eval entirely. Implement a restricted filter by parsing an allowlisted set of field/operator/value triples, e.g. parse the expression into an AST and only allow comparisons on note fields:\n\nALLOWED_FIELDS = {\"title\", \"body\"}\ndef applyFilterExpression(notes, field, op, value):\n    if field not in ALLOWED_FIELDS or op not in (\"contains\", \"eq\"):\n        raise ValueError(\"invalid filter\")\n    return [n for n in notes if value in n[FIELD_MAP[field]]]",
+      "rule": "CWE-95"
+    },
+    {
+      "id": "SEC-2",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 13,
+      "symbol": "search_notes",
+      "in_diff": true,
+      "title": "SQL injection via f-string interpolation of user_id and query",
+      "why": "The previous parameterised query was replaced with direct f-string interpolation of both `user_id` (attacker-controlled via the forged token — see SEC-3) and `query` (a raw URL parameter). Either value can break out of the SQL context to read, modify, or drop arbitrary tables. The `query` parameter is additionally trivial to reach without any authentication header since `current_user_id` returns `None` rather than rejecting unauthenticated requests, causing `user_id = None` to be interpolated literally.",
+      "evidence": "sql = f\"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'\"",
+      "fix": "Restore parameterised queries:\n\ncur.execute(\n    \"SELECT id, title, body FROM notes WHERE user_id = ? AND title LIKE ?\",\n    (user_id, \"%\" + query + \"%\"),\n)",
+      "rule": "CWE-89"
+    },
+    {
+      "id": "SEC-3",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 26,
+      "symbol": "current_user_id",
+      "in_diff": true,
+      "title": "Token contains user_id in plaintext with no signature verification",
+      "why": "`current_user_id` splits the token on `.` and returns `int(parts[1])` directly — it never checks the SHA-1 signature stored in `parts[0]`. Any caller can craft `<anything>.<target_user_id>` and impersonate any user in the system. This also means the SQL injection surface in `search_notes` and `insertNote` is fully attacker-controlled.",
+      "evidence": "parts = token.split(\".\")\nif len(parts) != 2:\n    return None\nreturn int(parts[1])",
+      "fix": "Verify the HMAC before trusting the payload:\n\ndef current_user_id(token):\n    if not token:\n        return None\n    parts = token.split(\".\")\n    if len(parts) != 2:\n        return None\n    sig, user_id = parts[0], parts[1]\n    expected = hashlib.sha1((user_id + \"|\" + JWT_SECRET).encode()).hexdigest()\n    if not hmac.compare_digest(sig, expected):\n        return None\n    return int(user_id)\n\nNote: the current token format embeds only `user_id` in the verifiable part; consider switching to a standard JWT library (e.g. PyJWT) that handles expiry and signature algorithm agility.",
+      "rule": "CWE-345"
+    },
+    {
+      "id": "SEC-4",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 48,
+      "symbol": "delete_note",
+      "in_diff": true,
+      "title": "SQL injection in delete_note via f-string interpolation of note_id",
+      "why": "Although Flask's `<int:note_id>` route converter guarantees an integer at the routing layer, the function signature accepts any value and interpolates it directly into SQL. If `delete_note` is ever called from a non-route context (e.g. a background job or admin CLI) with an unsanitised value, the injection is exploitable. Defensively, all DB functions should use parameterised queries regardless of the call site.",
+      "evidence": "cur.execute(f\"DELETE FROM notes WHERE id = {note_id}\")",
+      "fix": "Use a parameterised query:\n\ncur.execute(\"DELETE FROM notes WHERE id = ?\", (note_id,))",
+      "rule": "CWE-89"
+    },
+    {
+      "id": "SEC-5",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 31,
+      "symbol": "isAdmin",
+      "in_diff": true,
+      "title": "Admin bypass via hardcoded static token 'letmein-admin'",
+      "why": "The admin check compares the `X-Admin-Token` header against the hardcoded string `\"letmein-admin\"` imported from `config.py`. The secret is trivially guessable, committed to source control, and cannot be rotated without a code deploy. Any attacker who reads the repository (or guesses the value) gains permanent admin access to delete any note.",
+      "evidence": "ADMIN_BYPASS_TOKEN = \"letmein-admin\"\n...\nif token == ADMIN_BYPASS_TOKEN:\n    return True",
+      "fix": "Source the token from an environment variable and enforce minimum entropy:\n\nADMIN_BYPASS_TOKEN = os.environ[\"ADMIN_BYPASS_TOKEN\"]  # no default; fail-fast at startup\n\nLonger-term, replace the static shared secret with per-user role checks stored in the database and verified against the authenticated session.",
+      "rule": "CWE-798"
+    },
+    {
+      "id": "SEC-6",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 54,
+      "symbol": "filter_notes",
+      "in_diff": true,
+      "title": "Full stack trace returned to caller on unhandled exception",
+      "why": "The exception handler in `filter_notes` serialises both `str(e)` and `traceback.format_exc()` into the JSON response body. Stack traces disclose internal file paths, library versions, variable names, and interpreter internals that significantly assist an attacker in mapping the application and chaining vulnerabilities (e.g. confirming that `eval` is in play and seeing which expression fragment caused an error).",
+      "evidence": "return jsonify({\"error\": str(e), \"trace\": traceback.format_exc()}), 500",
+      "fix": "Log the trace server-side and return only a generic error message to the caller:\n\nimport logging\nlogger = logging.getLogger(__name__)\n...\nexcept Exception as e:\n    logger.exception(\"filter_notes failed\")\n    return jsonify({\"error\": \"internal server error\"}), 500",
+      "rule": "CWE-209"
+    },
+    {
+      "id": "SEC-7",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/config.py",
+      "line": 6,
+      "symbol": null,
+      "in_diff": false,
+      "title": "JWT_SECRET hardcoded in source; used as HMAC key for all tokens",
+      "why": "The `JWT_SECRET` string is committed directly to source control. Because `issue_token` uses it as the sole signing key, anyone who can read the repository can forge arbitrary tokens for any user. This pre-existing defect is now actively exploitable now that `current_user_id` is wired into auth-sensitive endpoints (search, create, filter) — though as noted in SEC-3, the signature is not even checked.",
+      "evidence": "JWT_SECRET = \"FAKE_NOT_A_REAL_KEY_s3cr3t_signing_key_2026\"",
+      "fix": "Remove from source. Load from environment at startup:\n\nJWT_SECRET = os.environ[\"JWT_SECRET\"]  # no default; fail fast",
+      "rule": "CWE-321"
+    },
+    {
+      "id": "SEC-8",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 17,
+      "symbol": "issue_token",
+      "in_diff": true,
+      "title": "Token includes a wall-clock timestamp but expiry is never validated",
+      "why": "The docstring claims the token is \"valid for 24 hours\" and a timestamp is embedded, but `current_user_id` never reads or checks the timestamp. Tokens are therefore valid forever, meaning a stolen or leaked token cannot be invalidated by time alone.",
+      "evidence": "raw = str(user_id) + \"|\" + str(int(time.time())) + \"|\" + JWT_SECRET\nreturn hashlib.sha1(raw.encode()).hexdigest() + \".\" + str(user_id)",
+      "fix": "Include the expiry in the verifiable payload and check it in `current_user_id`. Prefer a standard library (PyJWT) that handles expiry, algorithm pinning, and key rotation rather than a hand-rolled scheme.",
+      "rule": "CWE-613"
+    },
+    {
+      "id": "SEC-9",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 7,
+      "symbol": "hash_password",
+      "in_diff": false,
+      "title": "Passwords hashed with MD5 — no salt, cryptographically broken",
+      "why": "MD5 is not a password hashing function: it is fast, unsalted here, and fully broken for this purpose. Pre-computed rainbow tables exist for most common passwords. This is a pre-existing defect but is highlighted because this PR is the first to wire `verify_password` into live authentication flows.",
+      "evidence": "return hashlib.md5(password.encode()).hexdigest()",
+      "fix": "Replace with bcrypt, scrypt, or argon2:\n\nfrom argon2 import PasswordHasher\nph = PasswordHasher()\ndef hash_password(password): return ph.hash(password)\ndef verify_password(password, stored_hash): return ph.verify(stored_hash, password)",
+      "rule": "CWE-916"
+    }
+  ],
+  "summary": {
+    "files_reviewed": 5,
+    "findings_by_severity": {
+      "critical": 4,
+      "high": 3,
+      "medium": 2,
+      "low": 0
+    },
+    "clean": [
+      "sample-project/db.py: get_note, insertNote — use parameterised queries correctly",
+      "sample-project/utils.py: slugify, truncate, parse_tags — no injection surface",
+      "sample-project/app.py: register endpoint — input handled safely",
+      "sample-project/app.py: Flask route type converter <int:note_id> constrains note_id to integer at routing layer"
+    ],
+    "not_checked": [
+      "Database schema and migrations — not present in diff or repo",
+      "Test suite — not present in diff; PR author deferred integration tests",
+      "Dependency versions / third-party library CVEs — no requirements.txt in diff"
+    ]
+  }
+}

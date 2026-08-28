@@ -1,0 +1,56 @@
+{
+  "target": "PR #1 (main...pr/saved-filters-and-admin-delete)",
+  "scope": "diff",
+  "measurement_note": "Bob has no wall clock and invented timestamps in its own output (preserved verbatim at reviews/run-metadata.bob-raw.json, which claims 2025-07-15 and exactly 60s). The values below are MEASURED from filesystem modification times of the artifacts Bob wrote. start_at is unknown because the dispatch moment was not recorded; it is left null rather than estimated.",
+  "measured": {
+    "dispatch_at": null,
+    "first_subagent_output_at": "2026-08-28T15:16:05",
+    "last_subagent_output_at": "2026-08-28T15:16:15",
+    "subagent_completion_spread_seconds": 10,
+    "merged_review_written_at": "2026-08-28T15:19:13",
+    "synthesis_seconds_after_last_subagent": 178,
+    "total_wall_clock_seconds": null
+  },
+  "subagents": [
+    {
+      "name": "security-reviewer",
+      "status": "ok",
+      "output_written_at": "2026-08-28T15:16:15",
+      "findings": 9
+    },
+    {
+      "name": "style-reviewer",
+      "status": "ok",
+      "output_written_at": "2026-08-28T15:16:05",
+      "findings": 11
+    },
+    {
+      "name": "test-coverage-reviewer",
+      "status": "ok",
+      "output_written_at": "2026-08-28T15:16:11",
+      "findings": 9
+    },
+    {
+      "name": "docs-reviewer",
+      "status": "ok",
+      "output_written_at": "2026-08-28T15:16:11",
+      "findings": 8
+    }
+  ],
+  "findings_before_dedupe": 37,
+  "findings_after_dedupe": 35,
+  "by_severity": {
+    "critical": 4,
+    "high": 6,
+    "medium": 7,
+    "low": 2
+  },
+  "verdict": "Request changes",
+  "schema_repairs": [
+    "style.json: top-level key 'violations' renamed to 'findings'; extra non-schema keys 'review_id', 'pr', 'style_guide' noted but retained",
+    "tests.json: bare array wrapped in schema-compliant object envelope",
+    "docs.json: bare array wrapped in schema-compliant object envelope",
+    "style.json STY-4/STY-5: line corrected from 94 (diff offset) to 29 (actual file line)",
+    "style.json STY-11: line corrected from 153 (diff offset) to 22 (actual file line)"
+  ]
+}
