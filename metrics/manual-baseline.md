@@ -88,18 +88,34 @@ Rules for scoring honestly:
   the user id without verifying the hash" is.
 - Record the elapsed time **as measured**, even if they finished in 8 minutes.
 
-## Fallback if you truly cannot recruit anyone
+## If you cannot recruit anyone — run it on yourself, disclosed
 
-Do **not** fabricate a baseline. Instead, change what you claim. Drop the
-"human found N" comparison entirely and make the impact claim about what you can
-measure without a second person:
+Do **not** fabricate a baseline, and do not present a self-review as a cold one.
+Instead, change what the number *means*.
 
-- Wall-clock time for a complete four-concern review (from `run-metadata.json`)
-- Coverage against the catalogued defect list — Bob caught X of 13, an audited
-  denominator
-- Consistency: the same four passes run every time, with no concern dropped under
-  deadline pressure
+You know where every defect is. That makes you a **best-case** human reviewer:
 
-That is a weaker headline but it is fully defensible, and "we measured what we
-could measure honestly" survives a judge's follow-up question. An invented human
-baseline does not.
+- your time is a **floor** on how long a manual review takes, not an average
+- your find count is a **ceiling** on what a human catches
+
+Both biases run against Bob, which is what makes the number trustworthy. A judge
+can verify that reasoning in seconds.
+
+### Protocol
+
+Same worksheet, same timer, one addition: you must **write each finding up
+properly** — file, line, why, and a fix — not just tick recognition. The write-up
+is most of the real work in a review, and prior knowledge doesn't shortcut it.
+Start the timer when you open the diff; stop when the review would be ready to
+post.
+
+### Disclose it in one sentence
+
+In the video and in the written statement, say: *"I built this fixture, so I knew
+the defects going in — that makes my time a lower bound on manual review, not an
+average."* Disclosed, it reads as rigor. Undisclosed and later noticed, it reads
+as the opposite.
+
+Then report the comparison on **time and coverage-against-an-audited-denominator**,
+not on "human found 2, Bob found 6" — a comparison your prior knowledge has
+already invalidated.

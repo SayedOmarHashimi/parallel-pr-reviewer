@@ -1,6 +1,7 @@
 # Video demo script — Parallel PR Reviewer
 
-**Hard limit: 3:00.** Target 2:52 so an upload re-encode can't push you over.
+**Hard limit: 3:00.** Target 2:57. If a take runs over, cut in this order:
+the style-guide cutaway at 1:05 (−3s), then the dispatch hold at 0:35 (−5s).
 Requirement: 90+ seconds of the solution working live, narrated, with Bob visibly
 doing the work.
 
@@ -12,16 +13,22 @@ Every `{{...}}` below comes from a real run. Do not estimate any of them on came
 
 | Placeholder | Source |
 |---|---|
-| `{{MANUAL_MINUTES}}` | Your timed manual review of `pr/PR-1.diff` |
-| `{{MANUAL_FOUND}}` | Issues you found manually, scored vs `metrics/answer-key.md` |
+| `{{MANUAL_MINUTES}}` | Timed manual write-up of `pr/PR-1.diff` — see the baseline note below |
+| `{{MANUAL_FOUND}}` | Defects written up manually, scored vs `metrics/answer-key.md` |
 | `{{BOB_TIME}}` | `run-metadata.json` → `wall_clock_seconds` |
 | `{{BOB_FOUND}}` | `run-metadata.json` → `findings_after_dedupe` |
 | `{{PLANTED}}` | 13 (diff-scoped) — already known |
 | `{{CRITICAL_NAME}}` | The critical finding you'll spotlight (expected: the token identity bug) |
 
-If Bob finds fewer than you did manually, **say that instead**. A demo that reports
-a real mixed result is more credible than one that reports a suspiciously clean
-sweep, and judges scoring "effectiveness" have seen a lot of the latter.
+**On the baseline.** If a cold reviewer did it, say so and compare directly. If
+you did it yourself, you knew every defect in advance — so your time is a *floor*
+on manual review and your find count is a *ceiling*, both biased against Bob.
+Disclose it in one sentence on camera. A metric that leans against your own
+product is the kind people believe.
+
+If Bob finds fewer than the manual pass, **say that instead**. A real mixed result
+is more credible than a suspiciously clean sweep, and judges scoring
+"effectiveness" have seen a lot of the latter.
 
 ---
 
@@ -119,14 +126,15 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 ---
 
-### 2:35 – 2:52 · Impact and close (17s)
+### 2:35 – 2:57 · Impact and close (22s)
 
-**On screen:** Split — your manual notes beside `PR-1-review.md`.
+**On screen:** Split — `metrics/manual-baseline.md` beside `PR-1-review.md`.
 
-> "I reviewed this same PR by hand first. {{MANUAL_MINUTES}} minutes,
-> {{MANUAL_FOUND}} of the {{PLANTED}} real issues. Bob's four parallel agents:
-> {{BOB_TIME}}, {{BOB_FOUND}}. Same reviewer, same PR — the difference is that
-> four specialists read it instead of one tired generalist reading it four times."
+> "I built this codebase — I knew every defect going in. Writing up a complete
+> four-concern review still took me {{MANUAL_MINUTES}} minutes. That's a floor,
+> not an average. IBM Bob's four parallel agents, with no prior knowledge:
+> {{BOB_TIME}}, {{BOB_FOUND}} of {{PLANTED}}. Four specialists read this PR
+> instead of one generalist reading it four times."
 
 **End card:** repo URL.
 
