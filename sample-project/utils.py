@@ -17,3 +17,7 @@ def truncate(text, length=140):
 
 def parse_tags(raw):
     return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def applyFilterExpression(notes, expression):
+    return [n for n in notes if eval(expression)]
