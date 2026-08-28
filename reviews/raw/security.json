@@ -1,0 +1,166 @@
+{
+  "reviewer": "security",
+  "scope": "diff",
+  "target": "PR #1 (main...pr/saved-filters-and-admin-delete)",
+  "findings": [
+    {
+      "id": "SEC-1",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/utils.py",
+      "line": 23,
+      "symbol": "applyFilterExpression",
+      "in_diff": true,
+      "title": "Remote code execution via eval() on user-supplied filter expression",
+      "why": "eval(expression) executes an arbitrary Python string supplied directly from the request body with no sandboxing, allow-listing, or restriction. Any authenticated user can POST {\"expression\": \"__import__('os').system('rm -rf /')\"} to /notes/filter and achieve full server-side code execution. The PR description actively promotes this as a feature ('power users can write whatever they want'), making it intentional and all the more dangerous.",
+      "evidence": "    return [n for n in notes if eval(expression)]",
+      "fix": "Remove eval entirely. Implement a safe predicate DSL or restrict filtering to known fields:\n\n```python\nALLOWED_FIELDS = {\"title\", \"body\"}\ndef applyFilterExpression(notes, field, value):\n    if field not in ALLOWED_FIELDS:\n        raise ValueError(\"Invalid field\")\n    return [n for n in notes if value in (n[FIELDS[field]] or \"\")]\n```",
+      "rule": "CWE-95"
+    },
+    {
+      "id": "SEC-2",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 13,
+      "symbol": "search_notes",
+      "in_diff": true,
+      "title": "SQL injection in search_notes via f-string interpolation",
+      "why": "The PR removes parameterised queries and replaces them with direct f-string interpolation of both user_id and query into SQL. An attacker can pass q='; DROP TABLE notes; -- or exfiltrate the full database via the ?q= parameter. The PR description explicitly states this was done to support the % wildcard, but wildcards can be supported safely with parameterised queries.",
+      "evidence": "    sql = f\"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'\"\n    cur.execute(sql)",
+      "fix": "Restore parameterised queries and pass the wildcard inside the parameter value:\n\n```python\ncur.execute(\n    \"SELECT id, title, body FROM notes WHERE user_id = ? AND title LIKE ?\",\n    (user_id, \"%\" + query + \"%\"),\n)\n```",
+      "rule": "CWE-89"
+    },
+    {
+      "id": "SEC-3",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 48,
+      "symbol": "delete_note",
+      "in_diff": true,
+      "title": "SQL injection in delete_note via f-string interpolation",
+      "why": "delete_note interpolates note_id directly into the DELETE statement. Although the route parameter is typed <int:note_id> (Flask rejects non-integers at routing), trusting the router as the sole defence is fragile — any future caller of delete_note() from Python code would be fully injectable. This is also inconsistent with every other query in the file which uses ? placeholders.",
+      "evidence": "        cur.execute(f\"DELETE FROM notes WHERE id = {note_id}\")",
+      "fix": "```python\ncur.execute(\"DELETE FROM notes WHERE id = ?\", (note_id,))\n```",
+      "rule": "CWE-89"
+    },
+    {
+      "id": "SEC-4",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 20,
+      "symbol": "current_user_id",
+      "in_diff": true,
+      "title": "Broken authentication — token signature is never verified",
+      "why": "current_user_id splits the token on '.' and returns int(parts[1]) — it never verifies the HMAC/SHA-1 signature in parts[0]. Any user can forge a token like 'anyhash.42' to impersonate user ID 42. The issue_token function generates a signature, but nothing in the verification path checks it, making the entire auth system trivially bypassable.",
+      "evidence": "def current_user_id(token):\n    ...\n    parts = token.split(\".\")\n    if len(parts) != 2:\n        return None\n    return int(parts[1])   # signature in parts[0] is silently discarded",
+      "fix": "Recompute the expected signature and reject mismatches:\n\n```python\ndef current_user_id(token):\n    if not token:\n        return None\n    parts = token.split(\".\")\n    if len(parts) != 2:\n        return None\n    user_id = parts[1]\n    raw = user_id + \"|\" + JWT_SECRET\n    expected = hashlib.sha256(raw.encode()).hexdigest()\n    if not hmac.compare_digest(expected, parts[0]):\n        return None\n    return int(user_id)\n```",
+      "rule": "CWE-347"
+    },
+    {
+      "id": "SEC-5",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/config.py",
+      "line": 8,
+      "symbol": "ADMIN_BYPASS_TOKEN",
+      "in_diff": true,
+      "title": "Hardcoded admin bypass token with trivially guessable value",
+      "why": "ADMIN_BYPASS_TOKEN = \"letmein-admin\" is committed to source control and has an extremely weak, guessable value. Any person with read access to this repo (now or in git history forever) can issue X-Admin-Token: letmein-admin and delete any note. Combined with the broken signature check (SEC-4), an attacker does not even need a valid user account.",
+      "evidence": "ADMIN_BYPASS_TOKEN = \"letmein-admin\"",
+      "fix": "Remove the hardcoded value; read from the environment and enforce it is set:\n\n```python\nADMIN_BYPASS_TOKEN = os.environ[\"ADMIN_BYPASS_TOKEN\"]  # fail loudly at startup if unset\n```",
+      "rule": "CWE-798"
+    },
+    {
+      "id": "SEC-6",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 54,
+      "symbol": "filter_notes",
+      "in_diff": true,
+      "title": "Full Python stack trace exposed in API error response",
+      "why": "When applyFilterExpression raises an exception, the handler returns the full traceback.format_exc() to the caller. This leaks internal file paths, line numbers, module structure, and potentially variable values to unauthenticated or malicious users, significantly aiding reconnaissance.",
+      "evidence": "        return jsonify({\"error\": str(e), \"trace\": traceback.format_exc()}), 500",
+      "fix": "```python\napp.logger.exception(\"filter_notes error\")\nreturn jsonify({\"error\": \"internal error\"}), 500\n```",
+      "rule": "CWE-209"
+    },
+    {
+      "id": "SEC-7",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 7,
+      "symbol": "hash_password",
+      "in_diff": false,
+      "title": "MD5 used for password hashing — no salt, cryptographically broken",
+      "why": "hashlib.md5 is a fast, cryptographically broken hash with no salt. Password databases hashed this way are fully reversible with rainbow tables and can be cracked at billions of hashes per second on commodity hardware. Although pre-existing, this PR adds verify_password as a new import and actively calls hash_password, expanding the attack surface.",
+      "evidence": "def hash_password(password):\n    return hashlib.md5(password.encode()).hexdigest()",
+      "fix": "Replace with bcrypt or argon2-cffi:\n\n```python\nimport bcrypt\ndef hash_password(password):\n    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()\ndef verify_password(password, stored_hash):\n    return bcrypt.checkpw(password.encode(), stored_hash.encode())\n```",
+      "rule": "CWE-916"
+    },
+    {
+      "id": "SEC-8",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/config.py",
+      "line": 5,
+      "symbol": "config",
+      "in_diff": false,
+      "title": "Hardcoded production secrets (JWT_SECRET, STRIPE_API_KEY, DATABASE_URL) in source",
+      "why": "JWT_SECRET, DATABASE_URL (with embedded password), and a sk_live_ Stripe API key are all hardcoded in source. While the PR description calls these 'FAKE', production accidents with this pattern are common. The JWT_SECRET is also newly consumed by the issue_token function introduced in this PR, increasing the risk.",
+      "evidence": "DATABASE_URL = \"postgresql://devnotes_admin:FAKEPASSWORD_not_real@prod-db.internal:5432/devnotes\"\nJWT_SECRET = \"FAKE_NOT_A_REAL_KEY_s3cr3t_signing_key_2026\"\nSTRIPE_API_KEY = \"sk_live_FAKE_NOT_A_REAL_KEY_4eC39HqLyjWDarjtT1zdp7dc\"",
+      "fix": "All three should read from environment variables:\n\n```python\nDATABASE_URL = os.environ[\"DATABASE_URL\"]\nJWT_SECRET = os.environ[\"JWT_SECRET\"]\nSTRIPE_API_KEY = os.environ[\"STRIPE_API_KEY\"]\n```",
+      "rule": "CWE-312"
+    },
+    {
+      "id": "SEC-9",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 17,
+      "symbol": "issue_token",
+      "in_diff": true,
+      "title": "SHA-1 used for token signing — deprecated and vulnerable to length-extension",
+      "why": "hashlib.sha1 is a deprecated, collision-vulnerable hash function. NIST deprecated SHA-1 for digital signatures in 2011. The token is also implemented as a plain hash rather than an HMAC, making it vulnerable to length-extension attacks. This is moot until SEC-4 (signature never verified) is fixed, but must be fixed together.",
+      "evidence": "    return hashlib.sha1(raw.encode()).hexdigest() + \".\" + str(user_id)",
+      "fix": "Use hmac.new with SHA-256:\n\n```python\nimport hmac as _hmac\nsig = _hmac.new(JWT_SECRET.encode(), raw.encode(), \"sha256\").hexdigest()\n```",
+      "rule": "CWE-327"
+    },
+    {
+      "id": "SEC-10",
+      "severity": "medium",
+      "confidence": "medium",
+      "file": "sample-project/app.py",
+      "line": 20,
+      "symbol": "read_note",
+      "in_diff": false,
+      "title": "Insecure direct object reference — read_note lacks ownership check",
+      "why": "read_note fetches a note by ID without checking that the calling user owns it. Any user (or unauthenticated caller) can enumerate note IDs to read other users' private notes. This PR wires up current_user_id() for search and create but does not apply it to read_note, making the IDOR more conspicuous.",
+      "evidence": "@app.route(\"/notes/<int:note_id>\")\ndef read_note(note_id):\n    row = get_note(note_id)\n    ...\n    return jsonify({\"id\": row[0], \"title\": row[1], \"body\": row[2], ...})",
+      "fix": "Add an ownership check after fetching:\n\n```python\nuid = current_user_id(request.headers.get(\"Authorization\"))\nif row[3] != uid:\n    return jsonify({\"error\": \"forbidden\"}), 403\n```",
+      "rule": "CWE-639"
+    }
+  ],
+  "summary": {
+    "files_reviewed": 5,
+    "findings_by_severity": {
+      "critical": 2,
+      "high": 5,
+      "medium": 3,
+      "low": 0
+    },
+    "clean": [
+      "slugify, truncate, parse_tags utility functions — no security surface",
+      "Flask route definitions — no SSRF surface identified",
+      "insertNote parameterisation — existing, uses ? placeholders correctly"
+    ],
+    "not_checked": [
+      "Database schema / migration files — not present in repository",
+      "Python dependencies / requirements.txt — no such file found",
+      "Deployment and infrastructure configuration"
+    ]
+  }
+}

@@ -1,0 +1,164 @@
+{
+  "reviewer": "tests",
+  "scope": "diff",
+  "target": "PR #1 (main...pr/saved-filters-and-admin-delete)",
+  "findings": [
+    {
+      "id": "TST-1",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/utils.py",
+      "line": 23,
+      "symbol": "applyFilterExpression",
+      "in_diff": true,
+      "title": "No test for applyFilterExpression with arbitrary eval input",
+      "why": "applyFilterExpression calls eval() on a caller-supplied string with no sanitisation, allowing remote code execution. There is no test that verifies safe inputs are accepted, no test that confirms malicious inputs (e.g. __import__('os').system(...)) are rejected, and no test for the expected filtering behaviour at all. Without a test suite documenting the intended contract, any future hardening attempt has no baseline to validate against.",
+      "evidence": "    return [n for n in notes if eval(expression)]",
+      "fix": "Add test_applyFilterExpression_basic asserting a simple predicate like '\"tag\" in n[1]' filters correctly; add test_applyFilterExpression_rejects_code_execution asserting that an expression such as '__import__(\"os\")' raises a ValueError or is explicitly blocked by a guard added to the function.",
+      "rule": null
+    },
+    {
+      "id": "TST-2",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 13,
+      "symbol": "search_notes",
+      "in_diff": true,
+      "title": "No test for search_notes SQL injection via query or user_id",
+      "why": "The PR replaced parameterised queries with f-string interpolation for both user_id and query, introducing SQL injection. There is no test that passes a crafted query value (e.g. \"' OR '1'='1\") or a manipulated user_id to confirm the function either rejects it or is safe. Without a test, the regression from parameterised to interpolated SQL is invisible to CI.",
+      "evidence": "    sql = f\"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'\"",
+      "fix": "Add test_search_notes_rejects_sql_injection that calls search_notes with query=\"' OR '1'='1\" and asserts it does not return rows belonging to other users; add test_search_notes_null_user_id asserting that a None user_id does not produce a syntax-error SQL string that returns all rows.",
+      "rule": null
+    },
+    {
+      "id": "TST-3",
+      "severity": "critical",
+      "confidence": "high",
+      "file": "sample-project/db.py",
+      "line": 48,
+      "symbol": "delete_note",
+      "in_diff": true,
+      "title": "No test for delete_note SQL injection via note_id",
+      "why": "delete_note interpolates note_id directly into a DELETE statement with no parameterisation. There is no test confirming that only the targeted row is deleted or that a non-integer note_id is rejected before reaching the database. A crafted note_id such as '1 OR 1=1' could delete every note in the table.",
+      "evidence": "        cur.execute(f\"DELETE FROM notes WHERE id = {note_id}\")",
+      "fix": "Add test_delete_note_only_deletes_target that inserts two rows, calls delete_note on one id, and asserts only that row is gone; add test_delete_note_rejects_non_integer asserting a TypeError or validation error when note_id is a string.",
+      "rule": null
+    },
+    {
+      "id": "TST-4",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 26,
+      "symbol": "current_user_id",
+      "in_diff": true,
+      "title": "No test for current_user_id token parsing or forgery",
+      "why": "current_user_id extracts user identity solely from the suffix after the last '.' in the Authorization header and performs no signature verification, meaning any caller can set their own user_id by crafting a token. There are no tests for the None-token path, the malformed-token path, a token with more than one '.', or a forged token where the hash portion is wrong but the id portion is accepted.",
+      "evidence": "    return int(parts[1])",
+      "fix": "Add test_current_user_id_returns_none_for_missing_token, test_current_user_id_returns_none_for_malformed_token (e.g. 'abc'), and test_current_user_id_accepts_forged_token_exposing_no_verification (pass 'FAKEHASH.42' and assert it returns 42, documenting the security gap until a fix is in place).",
+      "rule": null
+    },
+    {
+      "id": "TST-5",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 14,
+      "symbol": "issue_token",
+      "in_diff": true,
+      "title": "No test for issue_token output format or uniqueness",
+      "why": "issue_token is the only function that mints auth tokens, but it has zero test coverage. There is no test confirming the returned string matches the expected 'hash.user_id' format, that different user_ids produce different tokens, or that the SHA-1 computation uses the expected inputs. A silent change to the format would break all downstream token parsing with no CI signal.",
+      "evidence": "    return hashlib.sha1(raw.encode()).hexdigest() + \".\" + str(user_id)",
+      "fix": "Add test_issue_token_format asserting the result contains exactly one '.' and that the suffix equals the passed user_id; add test_issue_token_different_users_differ asserting issue_token(1) != issue_token(2).",
+      "rule": null
+    },
+    {
+      "id": "TST-6",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/auth.py",
+      "line": 29,
+      "symbol": "isAdmin",
+      "in_diff": true,
+      "title": "No test for isAdmin — hardcoded bypass token acceptance",
+      "why": "isAdmin grants full admin rights to anyone presenting ADMIN_BYPASS_TOKEN ('letmein-admin'). There is no test that verifies a correct token returns True, an incorrect token returns False, or a missing header returns False. Without tests, the bypass token value could change in config without any test catching that isAdmin would silently stop working.",
+      "evidence": "    if token == ADMIN_BYPASS_TOKEN:\n        return True",
+      "fix": "Add test_isAdmin_returns_true_for_correct_token, test_isAdmin_returns_false_for_wrong_token, and test_isAdmin_returns_false_for_missing_header using a mock headers dict.",
+      "rule": null
+    },
+    {
+      "id": "TST-7",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 39,
+      "symbol": "remove_note",
+      "in_diff": true,
+      "title": "No test for remove_note auth gating (non-admin gets 403)",
+      "why": "remove_note is the only DELETE endpoint and its sole security control is the isAdmin check. There is no test that a request without X-Admin-Token receives 403, no test that a valid admin token produces 204, and no test that a non-existent note_id is handled gracefully (delete_note silently swallows exceptions). Any regression in the auth gate is invisible to CI.",
+      "evidence": "    if not isAdmin(request.headers):\n        return jsonify({\"error\": \"forbidden\"}), 403",
+      "fix": "Add test_remove_note_rejects_non_admin asserting DELETE /notes/1 without the admin header returns 403; add test_remove_note_admin_returns_204 asserting the endpoint returns 204 with a valid X-Admin-Token header.",
+      "rule": null
+    },
+    {
+      "id": "TST-8",
+      "severity": "high",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 46,
+      "symbol": "filter_notes",
+      "in_diff": true,
+      "title": "No test for filter_notes endpoint — eval path and error leak",
+      "why": "filter_notes is the entry point for the eval-based expression engine and also leaks a full Python traceback to callers on error. There is no test for the happy path (a valid expression filters correctly), no test that an unauthenticated caller is restricted to their own notes, and no test that the 500 error response actually includes a trace (documenting the information-disclosure behaviour).",
+      "evidence": "        return jsonify({\"error\": str(e), \"trace\": traceback.format_exc()}), 500",
+      "fix": "Add test_filter_notes_valid_expression asserting POST /notes/filter with a simple expression returns only matching notes; add test_filter_notes_error_returns_500_with_trace asserting that a bad expression triggers a 500 containing both 'error' and 'trace' keys.",
+      "rule": null
+    },
+    {
+      "id": "TST-9",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 13,
+      "symbol": "search",
+      "in_diff": true,
+      "title": "No test for search endpoint after user_id param removed",
+      "why": "The PR changed the search endpoint to derive user identity from the Authorization header via current_user_id() instead of a query parameter. There is no test confirming that an unauthenticated request (no header) returns an empty result set rather than all notes, nor that a valid token scopes results to the correct user.",
+      "evidence": "    uid = current_user_id(request.headers.get(\"Authorization\"))",
+      "fix": "Add test_search_unauthenticated_returns_empty asserting GET /notes/search?q=foo without an Authorization header does not return data from other users; add test_search_scoped_to_authenticated_user asserting results are filtered to the token's user_id.",
+      "rule": null
+    },
+    {
+      "id": "TST-10",
+      "severity": "medium",
+      "confidence": "high",
+      "file": "sample-project/app.py",
+      "line": 28,
+      "symbol": "create_note",
+      "in_diff": true,
+      "title": "No test for create_note after user_id moved to auth header",
+      "why": "Like search, create_note now derives user identity from the Authorization header rather than the request body. There is no test that creating a note without a valid token results in the note being created with a None user_id (and whether that is acceptable), and no test that the MAX_NOTE_LENGTH guard still fires correctly under the new control flow.",
+      "evidence": "    uid = current_user_id(request.headers.get(\"Authorization\"))",
+      "fix": "Add test_create_note_too_long asserting a body exceeding MAX_NOTE_LENGTH returns 400; add test_create_note_unauthenticated asserting that omitting the Authorization header either returns an error or explicitly documents that None is stored as the owner.",
+      "rule": null
+    }
+  ],
+  "summary": {
+    "files_reviewed": 5,
+    "findings_by_severity": {
+      "critical": 3,
+      "high": 5,
+      "medium": 2,
+      "low": 0
+    },
+    "clean": [
+      "sample-project/utils.py slugify() and truncate() — existing tests cover both functions adequately",
+      "sample-project/auth.py hash_password() and verify_password() — unchanged by this PR and already implicitly exercised"
+    ],
+    "not_checked": [
+      "sample-project/config.py — no logic to test, only constants",
+      "Integration/end-to-end coverage between app.py routes and the real database — no integration test harness exists in the repo; all findings above are unit-level gaps"
+    ]
+  }
+}
