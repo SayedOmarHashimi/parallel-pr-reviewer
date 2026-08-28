@@ -1,38 +1,31 @@
 ## Review: Add saved filters and admin note deletion
 
-**Request changes** — 4 critical, 6 high, 7 medium, 2 low
-across 5 files. Reviewed by four parallel passes in ~60s.
+**Request changes** — 11 critical, 17 high, 6 medium, 0 low
+across 5 files. Reviewed by four parallel passes in ~62s.
 
-This PR introduces two high-value features but ships four exploitable vulnerabilities in the diff itself: a server-side remote code execution via `eval`, two SQL injections (one introduced by deliberately removing a parameterised query), a broken authentication scheme that accepts any forged token as valid identity, and a hardcoded admin bypass token. The auth plumbing, the filter endpoint, and the delete endpoint each carry at least one critical or high defect. The test suite is unchanged despite every security-sensitive path being new code. Do not merge without addressing at minimum the critical findings.
+This PR ships two features on top of four exploitable vulnerabilities introduced in the diff itself. The filter endpoint passes user-supplied strings directly to `eval()` — server-side remote code execution reachable by any caller. The SQL injection in `search_notes` is a deliberate regression: a working parameterised query was replaced with an f-string. The new token authentication scheme accepts any forged token as a valid identity, because the SHA-1 signature is never checked. The admin deletion endpoint is gated by a hardcoded secret committed in plaintext. Every new security-sensitive function is also untested. Do not merge without addressing the critical findings; the high findings should be resolved in the same pass.
 
 ---
 
 ### Must fix before merge
 
-#### 1. `eval()` on user-supplied filter expression allows full RCE · `sample-project/utils.py:22` · critical · _security_
+#### 1. RCE via `eval()` on user-supplied filter expression · `sample-project/utils.py:22` · critical · _security_
 
-The `expression` value comes directly from the POST body sent by any authenticated caller and is passed without sanitisation to Python's built-in `eval()`. An attacker can execute arbitrary OS commands (e.g. `__import__('os').system('...')`) or read the filesystem with no additional privileges. Because authentication itself is broken (see finding 3), this endpoint is reachable without valid credentials.
-
-```python
-return [n for n in notes if eval(expression)]
-```
-
-**Fix:** Remove `eval` entirely. Implement a restricted filter by parsing an allowlisted set of field/operator/value triples, e.g.:
+`applyFilterExpression` passes the caller-controlled `expression` field directly to Python's `eval()` with no sandboxing or allowlist. Any authenticated caller (or unauthenticated caller, given finding 3) can POST to `/notes/filter` with an expression such as `__import__('os').system('...')` and execute arbitrary OS commands as the server process. The PR description frames this as intentional ("power users can write whatever they want"), making it a design-level RCE, not just an implementation slip.
 
 ```python
-ALLOWED_FIELDS = {"title", "body"}
-def apply_filter_expression(notes, field, op, value):
-    if field not in ALLOWED_FIELDS or op not in ("contains", "eq"):
-        raise ValueError("invalid filter")
-    return [n for n in notes if value in n[FIELD_MAP[field]]]
+def applyFilterExpression(notes, expression):
+    return [n for n in notes if eval(expression)]
 ```
-**Rule:** CWE-95
+
+**Fix:** Replace `eval()` with a safe predicate DSL. At minimum, parse the expression into an AST, whitelist only comparison/boolean node types, and evaluate against note fields in a restricted namespace — never call `eval()` or `exec()` on network-supplied input.
+**Rule:** CWE-94
 
 ---
 
-#### 2. SQL injection via f-string interpolation in `search_notes` · `sample-project/db.py:13` · critical · _security_
+#### 2. SQL injection in `search_notes` via f-string query interpolation · `sample-project/db.py:13` · critical · _security_
 
-The previous parameterised query was replaced with direct f-string interpolation of both `user_id` (attacker-controlled via forged token — see finding 3) and `query` (a raw URL parameter). Either value can break out of the SQL context to read, modify, or drop arbitrary tables. The PR description frames this as a user-requested wildcard feature; that framing does not justify removing parameterised queries.
+The previously parameterised query was replaced with a raw f-string that embeds both `user_id` and `query` directly into SQL. An attacker controlling either value (query via `?q=`, user_id via a crafted token — see finding 3) can inject arbitrary SQL, dump the entire database, or modify/delete rows. The PR description explicitly states this was done to "support the % wildcard", confirming the change was intentional.
 
 ```python
 sql = f"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'"
@@ -40,29 +33,77 @@ cur.execute(sql)
 ```
 
 **Fix:** Restore parameterised queries:
-
 ```python
 cur.execute(
     "SELECT id, title, body FROM notes WHERE user_id = ? AND title LIKE ?",
     (user_id, "%" + query + "%"),
 )
 ```
+To support literal `%` wildcards, escape them before constructing the parameter value rather than interpolating into SQL.
 **Rule:** CWE-89
 
 ---
 
-#### 3. Token contains user_id in plaintext with no signature verification · `sample-project/auth.py:26` · critical · _security_
+#### 3. Token auth is a no-op — any user_id accepted without signature verification · `sample-project/auth.py:26` · critical · _security_
 
-`current_user_id` splits the token on `.` and returns `int(parts[1])` directly — it never checks the SHA-1 signature stored in `parts[0]`. Any caller can craft `<anything>.<target_user_id>` and impersonate any user in the system. This also means the SQL injection surface in `search_notes` and `insertNote` is fully attacker-controlled.
+`current_user_id` splits the token on `.` and returns `int(parts[1])` with zero cryptographic verification. The SHA-1 prefix (`parts[0]`) is never checked. An attacker can forge a token of the form `anything.<victim_user_id>` and impersonate any user. Because this function now gates `/notes/search` and `/notes` (POST), the entire identity model for those endpoints is bypassed.
 
 ```python
-parts = token.split(".")
-if len(parts) != 2:
-    return None
-return int(parts[1])
+    return int(parts[1])
 ```
 
-**Fix:** Verify the HMAC before trusting the payload:
+**Fix:** Verify the signature before trusting the user_id. Recompute `HMAC-SHA256(user_id + "|" + timestamp, JWT_SECRET)` and compare with a constant-time comparison. Also verify the timestamp is within the allowed window (24 h). Reject the token if either check fails.
+**Rule:** CWE-347
+
+---
+
+#### 4. SQL injection in `delete_note` via f-string `note_id` interpolation · `sample-project/db.py:48` · critical · _security_
+
+`delete_note` constructs the DELETE statement by interpolating `note_id` directly into an f-string. Although Flask's `<int:note_id>` route converter enforces an integer at the HTTP layer, the function itself accepts any value and is callable from application code. A future internal caller or a bypass of the route layer would allow arbitrary SQL. The bare `except` clause also silently suppresses all database errors, masking injection attempts.
+
+```python
+        cur.execute(f"DELETE FROM notes WHERE id = {note_id}")
+```
+
+**Fix:** `cur.execute("DELETE FROM notes WHERE id = ?", (note_id,))` — and remove the bare `except/pass` block so database errors are surfaced.
+**Rule:** CWE-89
+
+---
+
+#### 5. Stack trace returned to caller on exception in `/notes/filter` · `sample-project/app.py:54` · critical · _security, style_
+
+Any exception from `applyFilterExpression` causes `traceback.format_exc()` to be serialised into the JSON response body. This leaks full server-side stack traces, file-system paths, Python interpreter internals, and potentially fragments of application data to external callers. An attacker can exploit this to map the application's internals before escalating to RCE (finding 1). Also an explicit violation of style rule 4.3. _[Merged: SEC-6 + STY-8]_
+
+```python
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+```
+
+**Fix:** Log the traceback server-side and return only a generic message to the caller:
+```python
+except Exception as e:
+    app.logger.exception(e)
+    return jsonify({"error": "internal server error"}), 500
+```
+**Rule:** CWE-209 / style 4.3
+
+---
+
+#### 6. `applyFilterExpression` uses `eval()` with no tests covering any path · `sample-project/utils.py:22` · critical · _tests_
+
+The entire function is a single `eval()` call on a caller-controlled string. No test exercises it at all — not the happy path, not a benign expression, not a malicious payload. An attacker who can reach `POST /notes/filter` can execute arbitrary Python in the server process. The absence of tests also means no one has verified that "simple predicates" actually work or fail gracefully.
+
+```python
+def applyFilterExpression(notes, expression):
+    return [n for n in notes if eval(expression)]
+```
+
+**Fix:** `test_applyFilterExpression_simple_predicate` — call with a known note list and safe predicate, assert correct filtering. `test_applyFilterExpression_code_injection` — pass `'__import__("os").system("id")'` and assert a `ValueError` is raised (once fixed to use a safe AST evaluator). `test_filter_notes_route_eval_rejected` — POST a system-call expression and assert 400, not 200 or 500 with trace.
+
+---
+
+#### 7. `current_user_id` never verifies the token signature — no test exists · `sample-project/auth.py:20` · critical · _tests_
+
+The function splits the token on `.` and returns `int(parts[1])` without checking the SHA-1 prefix against any known secret. Any caller can forge a token of the form `<garbage>.<target_user_id>` and impersonate any user. The function is now the sole identity gate for `/notes/search` and `/notes` (POST), yet has zero test coverage.
 
 ```python
 def current_user_id(token):
@@ -71,131 +112,16 @@ def current_user_id(token):
     parts = token.split(".")
     if len(parts) != 2:
         return None
-    sig, user_id = parts[0], parts[1]
-    expected = hashlib.sha1((user_id + "|" + JWT_SECRET).encode()).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return None
-    return int(user_id)
+    return int(parts[1])
 ```
-Longer-term, replace the hand-rolled scheme with a standard JWT library (e.g. PyJWT).
-**Rule:** CWE-345
+
+**Fix:** `test_current_user_id_valid_token` — call `issue_token(42)`, pass to `current_user_id`, assert 42. `test_current_user_id_forged_token` — pass `"deadbeef.99"` and assert `None` (once signature check is added). `test_current_user_id_missing_token` — pass `None`, assert `None`. `test_current_user_id_malformed_token` — pass `"notadottoken"`, assert `None`.
 
 ---
 
-#### 4. SQL injection in `delete_note` via f-string interpolation · `sample-project/db.py:48` · critical · _security_
+#### 8. `isAdmin` uses a hardcoded plaintext bypass token — no test exists · `sample-project/auth.py:29` · critical · _tests_
 
-Although Flask's `<int:note_id>` route converter guarantees an integer at the routing layer, the function signature accepts any value and interpolates it directly into SQL. If `delete_note` is ever called from a non-route context with an unsanitised value the injection is exploitable. Defensively, all DB functions must use parameterised queries regardless of call site.
-
-```python
-cur.execute(f"DELETE FROM notes WHERE id = {note_id}")
-```
-
-**Fix:** `cur.execute("DELETE FROM notes WHERE id = ?", (note_id,))`
-**Rule:** CWE-89
-
----
-
-#### 5. Stack trace returned to caller on unhandled exception · `sample-project/app.py:54` · critical · _security, style_
-
-The exception handler in `filter_notes` serialises both `str(e)` and `traceback.format_exc()` into the JSON response body. Stack traces disclose internal file paths, library versions, variable names, and interpreter internals — confirming to an attacker that `eval` is in play and showing which expression fragment caused an error. This is also an explicit violation of style rule 4.3. _[Merged finding: SEC-6 + STY-3]_
-
-```python
-return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-```
-
-**Fix:** Log server-side, return a generic message to the caller:
-
-```python
-import logging
-logger = logging.getLogger(__name__)
-# ...
-except Exception as e:
-    logger.exception("filter_notes failed")
-    return jsonify({"error": "internal server error"}), 500
-```
-**Rule:** CWE-209 / style 4.3
-
----
-
-#### 6. Hardcoded admin bypass token `"letmein-admin"` committed to source · `sample-project/auth.py:31` · high · _security_
-
-The admin check compares the `X-Admin-Token` header against the hardcoded string `"letmein-admin"` imported from `config.py`. The secret is trivially guessable, committed to source control, and cannot be rotated without a code deploy. Any attacker who reads the repository gains permanent admin access to delete any note.
-
-```python
-ADMIN_BYPASS_TOKEN = "letmein-admin"
-# ...
-if token == ADMIN_BYPASS_TOKEN:
-    return True
-```
-
-**Fix:** Source from an environment variable with no default — fail fast at startup:
-
-```python
-ADMIN_BYPASS_TOKEN = os.environ["ADMIN_BYPASS_TOKEN"]
-```
-Longer-term, replace the shared secret with per-user role checks stored in the database.
-**Rule:** CWE-798
-
----
-
-#### 7. JWT_SECRET hardcoded in source; used as HMAC key for all tokens · `sample-project/config.py:6` · high · _security_
-
-`JWT_SECRET` is committed directly to source control. Because `issue_token` uses it as the sole signing key, anyone who can read the repository can forge arbitrary tokens for any user. This pre-existing defect is now actively exploitable since `current_user_id` is wired into auth-sensitive endpoints (search, create, filter). In_diff: false.
-
-```python
-JWT_SECRET = "FAKE_NOT_A_REAL_KEY_s3cr3t_signing_key_2026"
-```
-
-**Fix:** `JWT_SECRET = os.environ["JWT_SECRET"]  # no default; fail fast`
-**Rule:** CWE-321
-
----
-
-#### 8. `applyFilterExpression` uses `eval()` with no tests · `sample-project/utils.py:22` · critical · _tests_
-
-No tests verify that the `eval`-based path refuses malicious expressions, returns the correct type for valid predicates, or behaves predictably on exceptions. Any attacker reaching `POST /notes/filter` can run arbitrary Python in the server process with no automated guard to detect a regression.
-
-```python
-def applyFilterExpression(notes, expression):
-    return [n for n in notes if eval(expression)]
-```
-
-**Fix:** Add `test_apply_filter_expression_arbitrary_code_execution` — assert an expression like `'__import__("os").getenv("HOME")'` raises or is refused; add `test_apply_filter_expression_valid` with a known note list and safe predicate.
-
----
-
-#### 9. `search_notes` changed to f-string — SQL injection path untested · `sample-project/db.py:13` · critical · _tests_
-
-The PR removed parameterised placeholders without adding any test to guard the new form. There is no automated check that `q="' OR '1'='1"` doesn't leak all rows, or that `user_id=None` raises rather than interpolating `None` literally into SQL.
-
-```python
-sql = f"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'"
-```
-
-**Fix:** Add `test_search_notes_sql_injection` — call against a test DB with an injection payload and assert only rows for the target user are returned.
-
----
-
-#### 10. `POST /notes/filter` route has no tests — eval-based RCE reachable with no guard · `sample-project/app.py:46` · critical · _tests_
-
-No test checks that malicious expressions are blocked, that the 500 path does not leak a traceback to the caller, or that only the authenticated user's notes are visible. The most dangerous new endpoint in this PR has zero test coverage.
-
-```python
-@app.route("/notes/filter", methods=["POST"])
-def filter_notes():
-    ...
-    return jsonify(applyFilterExpression(notes, body["expression"]))
-    except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-```
-
-**Fix:** Add `test_filter_notes_rce_expression`, `test_filter_notes_traceback_not_leaked`, and `test_filter_notes_valid_expression`.
-
----
-
-#### 11. `isAdmin` has no tests — hardcoded bypass token goes unvalidated · `sample-project/auth.py:29` · critical · _tests_
-
-The admin gate is a single string equality check against `"letmein-admin"`. No test verifies that a missing, empty, or wrong token is rejected, or documents the expected token-rotation mechanism (currently none).
+`ADMIN_BYPASS_TOKEN` is the literal string `"letmein-admin"` committed in `config.py`. `isAdmin()` grants full admin rights to anyone who sends this header value. There is no test that confirms a correct token grants access, confirms any other value is denied, or catches the trivially-guessable value at review time.
 
 ```python
 def isAdmin(request_headers):
@@ -205,221 +131,362 @@ def isAdmin(request_headers):
     return False
 ```
 
-**Fix:** `test_is_admin_correct_token`, `test_is_admin_wrong_token`, `test_is_admin_missing_header`.
+**Fix:** `test_isAdmin_correct_token`, `test_isAdmin_wrong_token`, `test_isAdmin_missing_header`, `test_remove_note_route_forbidden` (assert 403 without header), `test_remove_note_route_admin_allowed` (assert 204 with correct header).
+
+---
+
+#### 9. `search_notes` switched from parameterised query to f-string — SQL injection path untested · `sample-project/db.py:13` · critical · _tests_
+
+The previous implementation used `?` placeholders (parameterised). This PR replaces it with an f-string that interpolates `user_id` and `query` directly into SQL. Because `current_user_id()` returns `int(parts[1])` from an unverified token, an attacker controls `user_id`. A crafted `query` value also injects into the LIKE clause. Neither injection vector has a test.
+
+```python
+sql = f"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'"
+cur.execute(sql)
+```
+
+**Fix:** `test_search_notes_sql_injection_query` — call `search_notes("' OR '1'='1", 1)` against a test DB and assert only expected rows are returned. `test_search_notes_sql_injection_user_id` — call `search_notes("", "1 OR 1=1")` and assert an error or empty result.
+
+---
+
+#### 10. `eval` on user-supplied expression reachable over HTTP with no test · `sample-project/app.py:46` · critical · _tests_
+
+The route is entirely new and untested. It chains two already-untested vulnerabilities: `current_user_id()` allows identity spoofing, so the filter runs on any user's notes; the expression is passed directly to `eval()`. The error handler exposes a full Python traceback. None of these paths have a test.
+
+```python
+@app.route("/notes/filter", methods=["POST"])
+def filter_notes():
+    body = request.get_json()
+    uid = current_user_id(request.headers.get("Authorization"))
+    notes = search_notes("", uid)
+    try:
+        return jsonify(applyFilterExpression(notes, body["expression"]))
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+```
+
+**Fix:** `test_filter_notes_valid_expression`, `test_filter_notes_eval_injection` (assert 400 not 200/500), `test_filter_notes_error_no_trace_leak` (assert 500 response has no `"trace"` key).
+
+---
+
+#### 11. `eval`-based function has no docstring — critical undisclosed risk · `sample-project/utils.py:22` · critical · _docs_
+
+`applyFilterExpression` passes the caller-supplied `expression` string directly to `eval()` inside a list comprehension with no sandboxing, no allowlist, and no validation. This is a remote code execution vector. The function has no docstring at all, so the eval usage and its security implications are completely invisible to every downstream caller and reviewer.
+
+```python
+def applyFilterExpression(notes, expression):
+    return [n for n in notes if eval(expression)]
+```
+
+**Fix:** Add a docstring with a prominent `WARNING:` block stating that `eval()` is called on unsanitised caller-supplied input and that the function must not be exposed to untrusted input until replaced with a safe evaluator.
+
+---
+
+#### 12. Hardcoded admin bypass token `"letmein-admin"` grants unrestricted note deletion · `sample-project/config.py:8` · high · _security_
+
+`ADMIN_BYPASS_TOKEN = "letmein-admin"` is committed in plaintext. Anyone who reads the source code can send `X-Admin-Token: letmein-admin` and delete any note in the system. The secret is trivially guessable even without code access and cannot be rotated without a code deploy and redeploy.
+
+```python
+ADMIN_BYPASS_TOKEN = "letmein-admin"
+```
+
+**Fix:** `ADMIN_BYPASS_TOKEN = os.environ['ADMIN_BYPASS_TOKEN']` — no default; fail fast at startup. Rotate the value immediately if this commit is or was public.
+**Rule:** CWE-798
+
+---
+
+#### 13. Tokens never expire — issued timestamp is never validated · `sample-project/auth.py:17` · high · _security_
+
+`issue_token` embeds a Unix timestamp and its docstring claims "24 hours" validity. `current_user_id` never parses or checks the timestamp, so every token is permanently valid. A stolen or leaked token cannot be invalidated by time. Combined with the missing signature verification (finding 3), credential revocation is impossible without a database-level token blocklist.
+
+```python
+    raw = str(user_id) + "|" + str(int(time.time())) + "|" + JWT_SECRET
+    return hashlib.sha1(raw.encode()).hexdigest() + "." + str(user_id)
+```
+
+**Fix:** After fixing finding 3, include the timestamp in the verifiable payload, parse it in `current_user_id`, and reject tokens where `time.time() - issued_at > 86400`.
+**Rule:** CWE-613
+
+---
+
+#### 14. `issue_token` has no tests — output format and round-trip correctness unverified · `sample-project/auth.py:14` · high · _tests_
+
+`issue_token()` is the only token-minting function and is depended upon by `current_user_id()` for the expected token format. No test verifies the output structure (`hex.user_id`), that the user_id round-trips correctly, or that tokens for different users are distinct.
+
+```python
+def issue_token(user_id):
+    """Returns a signed JWT valid for 24 hours."""
+    raw = str(user_id) + "|" + str(int(time.time())) + "|" + JWT_SECRET
+    return hashlib.sha1(raw.encode()).hexdigest() + "." + str(user_id)
+```
+
+**Fix:** `test_issue_token_format` — assert result matches `r'^[0-9a-f]{40}\.7$'` for `user_id=7`. `test_issue_token_different_users_differ`. `test_issue_token_round_trip` — assert `current_user_id(issue_token(5)) == 5`.
+
+---
+
+#### 15. `delete_note` is new with no tests — SQL injection and silent-failure paths uncovered · `sample-project/db.py:44` · high · _tests_
+
+`delete_note()` is entirely new. It uses an f-string for the `note_id` in a DELETE statement, making it injectable. It also swallows all exceptions silently, so callers can never observe a failure. Neither the happy path, the no-op path, nor the error path is exercised.
+
+```python
+def delete_note(note_id):
+    ...
+    try:
+        cur.execute(f"DELETE FROM notes WHERE id = {note_id}")
+        conn.commit()
+    except:
+        pass
+```
+
+**Fix:** `test_delete_note_deletes_row`, `test_delete_note_nonexistent_id`, `test_delete_note_sql_injection` — assert parameterisation error is raised (will pass once fixed).
+
+---
+
+#### 16. `DELETE /notes/<id>` route has no tests — 403 and 204 paths unchecked · `sample-project/app.py:38` · high · _tests_
+
+The route is entirely new. No test verifies that a request without `X-Admin-Token` is rejected with 403, that a request with the correct token returns 204, or that `delete_note` is actually called.
+
+```python
+@app.route("/notes/<int:note_id>", methods=["DELETE"])
+def remove_note(note_id):
+    if not isAdmin(request.headers):
+        return jsonify({"error": "forbidden"}), 403
+    delete_note(note_id)
+    return "", 204
+```
+
+**Fix:** `test_remove_note_no_token_returns_403`, `test_remove_note_valid_token_returns_204`, `test_remove_note_actually_deletes`.
+
+---
+
+#### 17. Docstring falsely claims the token is a JWT · `sample-project/auth.py:15` · high · _docs_
+
+The docstring reads "Returns a signed JWT valid for 24 hours." The return value is `sha1hex + "." + user_id` — a plain SHA-1 hex digest concatenated with the user ID, not a JWT (which has three base64url-encoded segments). Callers relying on JWT-parsing libraries will fail; security reviewers auditing "JWT usage" will be misled about the token format.
+
+**Fix:** Replace the docstring to accurately describe the `<sha1hex>.<user_id>` format, note the token is not a JWT, and document that the digest and timestamp are not verified on the read path.
+
+---
+
+#### 18. Docstring falsely claims tokens expire after 24 hours · `sample-project/auth.py:15` · high · _docs_
+
+The docstring states "valid for 24 hours" but `current_user_id()` does not parse the token, verify the digest, or inspect the embedded timestamp. A token issued by `issue_token` is valid forever. This is a separate inaccuracy from finding 17 in the same docstring.
+
+**Fix:** Add to the docstring: "There is no expiry enforcement — `current_user_id()` does not validate the digest or the timestamp embedded in the token."
+
+---
+
+#### 19. Security-critical authentication function has no docstring · `sample-project/auth.py:20` · high · _docs_
+
+`current_user_id` is the sole authentication gate for `search`, `create_note`, and `filter_notes`. It has no docstring. The function accepts any string matching `<anything>.<integer>` as a valid identity — the SHA-1 prefix is never verified. This behaviour and its security implication are entirely invisible to callers.
+
+**Fix:** Add a docstring documenting the accepted token format, the `None` return contract, and a clear warning that the SHA-1 prefix is not verified and tokens do not expire.
+
+---
+
+#### 20. Security-critical authorisation function has no docstring · `sample-project/auth.py:29` · high · _docs_
+
+`isAdmin` controls access to the admin deletion endpoint. It has no docstring. The bare string comparison against a hardcoded config value (`"letmein-admin"`) is invisible to callers, as is the fact that admin access is controlled solely by a single static secret with no per-user identity.
+
+**Fix:** Add a docstring documenting the `X-Admin-Token` header, the config source, the plain string equality comparison (not constant-time), and the `bool` return type.
+
+---
+
+#### 21. `applyFilterExpression` uses camelCase — violates naming rules 1.1 and 1.4 · `sample-project/utils.py:22` · high · _style_
+
+Rule 1.1 requires `snake_case` for all functions. `applyFilterExpression` uses camelCase.
+
+```python
+def applyFilterExpression(notes, expression):
+```
+
+**Fix:** Rename to `apply_filter_expression` and update the import and call site in `app.py`.
+**Rule:** 1.1
+
+---
+
+#### 22. Import of `applyFilterExpression` propagates naming violation · `sample-project/app.py:7` · high · _style_
+
+Downstream of finding 21. Fixed automatically when finding 21 is resolved.
+
+```python
+from utils import slugify, truncate, parse_tags, applyFilterExpression
+```
+
+**Fix:** Update to `apply_filter_expression` once `utils.py` is corrected.
+**Rule:** 1.1
+
+---
+
+#### 23. `isAdmin` uses camelCase and fails predicate naming contract · `sample-project/auth.py:29` · high · _style_
+
+Rule 1.1 requires `snake_case` for all functions; rule 1.4 requires boolean-returning functions to use the `is_`/`has_` predicate form. `isAdmin` violates both rules. _[Merged: STY-3 + STY-4]_
+
+```python
+def isAdmin(request_headers):
+```
+
+**Fix:** Rename to `is_admin` and update all import and call sites.
+**Rule:** 1.1, 1.4
+
+---
+
+#### 24. Import of `isAdmin` propagates naming violation · `sample-project/app.py:6` · high · _style_
+
+Downstream of finding 23. Fixed automatically when finding 23 is resolved.
+
+```python
+from auth import current_user_id, isAdmin, hash_password, verify_password
+```
+
+**Fix:** Update to `is_admin` once `auth.py` is corrected.
+**Rule:** 1.1
+
+---
+
+#### 25. `import traceback` placed after third-party import — wrong import order · `sample-project/app.py:2` · high · _style_
+
+Rule 2.2 requires stdlib → (blank line) → third-party → (blank line) → first-party. `from flask import ...` (third-party) precedes `import traceback` (stdlib) with no blank-line separation.
+
+```python
+from flask import Flask, request, jsonify
+import traceback
+```
+
+**Fix:** Reorder: `import traceback` first, blank line, then `from flask import ...`, blank line, then first-party imports.
+**Rule:** 2.2
+
+---
+
+#### 26. Wildcard import from config (pre-existing) · `sample-project/db.py:2` · high · _style_
+
+Rule 2.1 forbids `from x import *`. Every name in `config.py` is silently pulled into `db.py`'s namespace, defeating static analysis and making symbol origins unknowable. In_diff: false.
+
+```python
+from config import *
+```
+
+**Fix:** Replace with explicit imports of only the names `db.py` actually uses, e.g. `from config import DATABASE_URL`.
+**Rule:** 2.1
+
+---
+
+#### 27. `insertNote` uses camelCase name (pre-existing) · `sample-project/db.py:29` · high · _style_
+
+Rule 1.1 requires `snake_case`. `insertNote` is camelCase. Pre-existing; in_diff: false.
+
+```python
+def insertNote(title, body, user_id, tags=[]):
+```
+
+**Fix:** Rename to `insert_note` and update all call sites.
+**Rule:** 1.1
+
+---
+
+#### 28. Mutable default argument `tags=[]` in `insertNote` (pre-existing) · `sample-project/db.py:29` · high · _style_
+
+Rule 3.1 forbids mutable default arguments. The list `[]` is created once at definition time and shared across every call that omits `tags`. Pre-existing; in_diff: false.
+
+**Fix:** Change to `tags=None` and add `if tags is None: tags = []` at the top of the body.
+**Rule:** 3.1
 
 ---
 
 ### Should fix
 
-#### 12. Docstring falsely claims return value is a JWT · `sample-project/auth.py:15` · high · _docs_
+#### 29. `except:` block contains only `pass` in `delete_note` — errors silently swallowed · `sample-project/db.py:50` · medium (bare `except`) and `sample-project/db.py:51` · medium (only `pass`) · _style_
 
-Callers and reviewers reading the docstring will assume the token is a standards-compliant JWT (three base64url segments, verifiable with any JWT library). In reality the function returns a two-part string `sha1hex.user_id`. Code that tries to decode or verify it as a JWT will fail silently or with a misleading error.
-
-**Fix:** Replace the docstring: _"Returns a token of the form `<sha1hex>.<user_id>`. The sha1 is computed over `user_id + '|' + unix_timestamp + '|' + JWT_SECRET`. Note: expiry is embedded but NOT verified by `current_user_id()`."_
-
----
-
-#### 13. Docstring claims tokens expire after 24 hours — expiry is never enforced · `sample-project/auth.py:15` · high · _docs_
-
-A caller reading "valid for 24 hours" will assume old tokens are automatically rejected. `current_user_id()` never inspects the timestamp — tokens are valid indefinitely. (Note: this is a separate inaccuracy in the same docstring as finding 12; both must be corrected.)
-
-**Fix:** Add to the docstring: _"The timestamp is embedded in the token but expiry is not enforced by `current_user_id()`; tokens do not expire."_
-
----
-
-#### 14. `current_user_id` has no tests — token parsing is trivially bypassable · `sample-project/auth.py:20` · high · _tests_
-
-No assertion exists that a crafted token like `"anything.999"` is rejected, that `None` is returned for missing/malformed tokens, or that an attacker cannot impersonate any user.
-
-**Fix:** `test_current_user_id_forged_token` — assert `current_user_id("forged.42")` does NOT return 42; `test_current_user_id_missing_token`; `test_current_user_id_malformed_token`.
-
----
-
-#### 15. `issue_token` has no tests — token format and signature unverified · `sample-project/auth.py:14` · high · _tests_
-
-No assertion verifies the produced token has the expected format, that `current_user_id` can round-trip it, or that changing `JWT_SECRET` produces a different hash.
-
-**Fix:** `test_issue_token_format`, `test_issue_token_roundtrip`, `test_issue_token_secret_sensitivity`.
-
----
-
-#### 16. `delete_note` has no tests — silent exception suppression and SQL injection unverified · `sample-project/db.py:44` · high · _tests_
-
-Bare `except/pass` silently swallows all DB errors; the f-string SQL injection is also unguarded. Neither the happy-path deletion nor the silent-failure branch is verified.
-
-**Fix:** `test_delete_note_removes_row`, `test_delete_note_sql_injection`, `test_delete_note_nonexistent_id`.
-
----
-
-#### 17. `DELETE /notes/<id>` route has no tests — admin gate and deletion response unverified · `sample-project/app.py:38` · high · _tests_
-
-No assertion verifies that a request without `X-Admin-Token` returns 403, that a correct-token request returns 204, or that the route actually invokes `delete_note`.
-
-**Fix:** `test_remove_note_forbidden`, `test_remove_note_success`.
-
----
-
-#### 18. Bare `except:` catches all exceptions including `BaseException` · `sample-project/db.py:50` · high · _style_
-
-Rule 4.1 forbids bare `except:` — it catches `KeyboardInterrupt` and `SystemExit`, masking serious failures and making debugging impossible.
+Rule 4.1 forbids bare `except:` (catches `SystemExit`, `KeyboardInterrupt`, `GeneratorExit`). Rule 4.2 forbids an `except` block containing only `pass`. If the error is genuinely ignorable, the rule requires logging it and a comment explaining why.
 
 ```python
     except:
         pass
 ```
 
-**Fix:** Catch the narrowest applicable exception: `except Exception as e:`
-**Rule:** 4.1
+**Fix:** `except sqlite3.DatabaseError as e: logging.warning("delete_note failed: %s", e)  # row may not exist; caller does not need to know`
+**Rule:** 4.1, 4.2
 
 ---
 
-#### 19. `except` block contains only `pass` — errors silently swallowed · `sample-project/db.py:51` · high · _style_
+#### 30. Passwords hashed with unsalted MD5 — trivially crackable (pre-existing) · `sample-project/auth.py:7` · medium · _security_
 
-Rule 4.2 forbids an `except` block containing only `pass`. A DELETE failure (constraint violation, connection error) is completely invisible. If genuinely ignorable, log it and add a comment saying why.
-
-**Fix:** `except Exception as e: logger.warning("delete_note failed for id=%s: %s", note_id, e)`
-**Rule:** 4.2
-
----
-
-#### 20. Wildcard import from config · `sample-project/db.py:2` · high · _style_
-
-Rule 2.1 forbids `from x import *`. It defeats static analysis and makes the origin of every name in `db.py` unknowable. Pre-existing, but present in diff context. In_diff: false.
-
-**Fix:** `from config import DATABASE_URL` (and any other symbols actually used in this module).
-**Rule:** 2.1
-
----
-
-#### 21. No docstring on `applyFilterExpression` — dangerous `eval` is completely undocumented · `sample-project/utils.py:22` · high · _docs_
-
-The absence of any docstring means neither the route author nor future maintainers will notice the code-execution risk from reading the signature alone. _Note: docs-reviewer rated this critical; security-reviewer's separate RCE finding (finding 1) captures the exploitability. Docstring gap rated high here as a standalone issue._
-
-**Fix:** Add a docstring with a prominent security warning that `eval` is used and untrusted input must not be passed until a safe evaluator replaces it.
-
----
-
-#### 22. No docstring on `current_user_id` — signature bypass invisible to callers · `sample-project/auth.py:20` · medium · _docs_
-
-Without a docstring, callers do not know the function returns `None` (not raises) on a missing/malformed token, or that the user_id is taken from the token's second segment with no signature verification.
-
-**Fix:** Document accepted token format, return type, and the critical warning that the signature is not verified.
-
----
-
-#### 23. No docstring on `isAdmin` — header name and secret source invisible · `sample-project/auth.py:29` · medium · _docs_
-
-Reviewers do not know which header is inspected (`X-Admin-Token`), that the comparison is against a hardcoded config value, or that there is no rate-limiting or HMAC protection.
-
-**Fix:** Document the header name, config source, and bare string-equality behaviour.
-
----
-
-#### 24. `isAdmin` function name violates snake_case (rules 1.1 and 1.4) · `sample-project/auth.py:29` · medium · _style_
-
-`isAdmin` uses camelCase (violates rule 1.1) and fails the predicate naming contract `is_admin` (violates rule 1.4). _[Merged STY-4 + STY-5]_
+`hash_password` uses `hashlib.md5` with no salt. MD5 is cryptographically broken; precomputed rainbow tables exist for common passwords. This was pre-existing but is now actively exercised via `/auth/register`, elevating it from latent to actively exploitable. In_diff: false.
 
 ```python
-def isAdmin(request_headers):
+    return hashlib.md5(password.encode()).hexdigest()
 ```
 
-**Fix:** Rename to `is_admin` and update all call sites.
-**Rule:** 1.1, 1.4
-
----
-
-#### 25. `applyFilterExpression` function name violates snake_case · `sample-project/utils.py:22` · medium · _style_
-
-Rule 1.1 requires all functions to use snake_case.
-
-```python
-def applyFilterExpression(notes, expression):
-```
-
-**Fix:** Rename to `apply_filter_expression` and update the import in `app.py`.
-**Rule:** 1.1
-
----
-
-#### 26. `applyFilterExpression` import name is camelCase · `sample-project/app.py:7` · medium · _style_
-
-Flows directly from the definition violation above. In_diff: true.
-
-**Fix:** Follows automatically from renaming the definition (finding 25).
-**Rule:** 1.1
-
----
-
-#### 27. `isAdmin` import name is camelCase · `sample-project/app.py:6` · medium · _style_
-
-Flows directly from finding 24.
-
-**Fix:** Follows automatically from renaming the definition (finding 24).
-**Rule:** 1.1
-
----
-
-#### 28. `insertNote` uses camelCase name and mutable default `tags=[]` · `sample-project/db.py:29` · medium · _style_
-
-Pre-existing. Rule 1.1 (camelCase) and rule 3.1 (mutable default argument — the default list is created once at definition time and shared across all calls). In_diff: false.
-
-```python
-def insertNote(title, body, user_id, tags=[]):
-```
-
-**Fix:** Rename to `insert_note`; change signature to `tags=None` with `if tags is None: tags = []` in the body.
-**Rule:** 1.1, 3.1
-
----
-
-#### 29. No docstring on `delete_note` — silent error suppression invisible · `sample-project/db.py:44` · medium · _docs_
-
-The `except: pass` behaviour (a failed DELETE returns `None` with no indication of failure) is completely hidden from callers. The calling route always responds 204, giving the admin no way to tell whether deletion succeeded.
-
-**Fix:** Add a docstring documenting the silent-failure behaviour explicitly.
-
----
-
-#### 30. Token includes a timestamp but expiry is never validated · `sample-project/auth.py:17` · medium · _security_
-
-The docstring claims "valid for 24 hours" and a timestamp is embedded, but `current_user_id` never reads or checks the timestamp. Tokens are valid forever, meaning a stolen token cannot be invalidated by time alone.
-
-**Fix:** Include the expiry in the verifiable payload and check it in `current_user_id`. Prefer PyJWT.
-**Rule:** CWE-613
-
----
-
-#### 31. Passwords hashed with MD5 — no salt, cryptographically broken · `sample-project/auth.py:7` · medium · _security_
-
-MD5 is fast and unsalted — rainbow tables exist for common passwords. Pre-existing but now elevated because `verify_password` is wired into live authentication flows by this PR. In_diff: false.
-
-**Fix:** Replace with argon2, bcrypt, or scrypt.
+**Fix:** Replace with `bcrypt`, `scrypt`, or Argon2. Update `verify_password` accordingly and plan a migration of existing hashes.
 **Rule:** CWE-916
 
 ---
 
-### Consider
+#### 31. Pre-existing hardcoded `JWT_SECRET` now actively used for token signing · `sample-project/config.py:6` · medium · _security_
 
-- **No docstring on DELETE route `remove_note`** · `sample-project/app.py:39` · _docs_ — Auth requirement and silent-failure behaviour undocumented; developers wiring clients have no inline guidance.
-- **No docstring on filter route `filter_notes`** · `sample-project/app.py:47` · _docs_ — `eval` risk and full traceback leak are invisible from the route signature alone.
+`JWT_SECRET` was already hardcoded before this PR. This PR activates it: `issue_token` now uses it as the sole signing material. Even if finding 3 is fixed and signatures are verified, the secret is committed to version control and known to anyone with repo access. In_diff: false.
+
+```python
+JWT_SECRET = "FAKE_NOT_A_REAL_KEY_s3cr3t_signing_key_2026"
+```
+
+**Fix:** `JWT_SECRET = os.environ['JWT_SECRET']` — no default; fail fast. Rotate and invalidate all outstanding tokens after deployment.
+**Rule:** CWE-798
+
+---
+
+#### 32. `delete_note` has no docstring; silent exception swallowing undocumented · `sample-project/db.py:44` · medium · _docs_
+
+`delete_note` has no docstring. Its `except: pass` block silently discards all exceptions — callers (including `remove_note`) have no way to determine whether the delete succeeded or failed. This behaviour is completely undocumented.
+
+**Fix:** Add a docstring explicitly noting that all database exceptions are silently swallowed and that the function returns `None` regardless of success or failure.
+
+---
+
+#### 33. DELETE route has no docstring; auth requirement and silent-failure invisible · `sample-project/app.py:39` · medium · _docs_
+
+`remove_note` has no docstring. Two important behaviours are invisible: the route requires a valid `X-Admin-Token` header; and it calls `delete_note` which silently swallows exceptions, so a 204 response does not guarantee the note was actually deleted.
+
+**Fix:** Add a docstring documenting the `X-Admin-Token` requirement, the 403 response for missing/wrong token, and the silent-failure caveat.
+
+---
+
+#### 34. POST filter route has no docstring; eval risk and traceback leak invisible · `sample-project/app.py:47` · medium · _docs_
+
+`filter_notes` has no docstring. Two significant behaviours are invisible: it delegates to `applyFilterExpression` which calls `eval()` on the caller-supplied `expression` field; and on any exception it returns the full server-side traceback in the JSON response body.
+
+**Fix:** Add a docstring documenting the `expression` field semantics, the `eval()` usage with a security warning, and the traceback-leak in error responses.
+
+---
+
+#### 35. `truncate` ellipsis branch has no test (pre-existing gap) · `sample-project/utils.py:11` · medium · _tests_
+
+The only existing test for `truncate` exercises the short-text branch. The ellipsis branch is unreachable by any test. Surfaced here because `truncate` is called in the `/notes/search` response and its output contract is material to the API. In_diff: false.
+
+```python
+def truncate(text, length=140):
+    if len(text) <= length:
+        return text
+    return text[:length] + "..."
+```
+
+**Fix:** `test_truncate_long_text_ellipsis` — call `truncate('a' * 200)` and assert the result is `'a' * 140 + '...'` and `len(result) == 143`.
 
 ---
 
 ### Test coverage
 
-The existing test suite covers only `slugify` (2 cases) and the short-text branch of `truncate` (1 case). Every new and changed symbol in this PR is untested.
+The existing test suite covers only `slugify` (2 cases) and the short-text branch of `truncate` (1 case). Every new or changed symbol in this PR is entirely untested.
 
 | Added or changed | Tested | Suggested test |
 |---|---|---|
-| `applyFilterExpression` | ❌ | `test_apply_filter_expression_rce_blocked`, `test_apply_filter_expression_valid` |
-| `current_user_id` | ❌ | `test_current_user_id_forged_token`, `test_current_user_id_none`, `test_current_user_id_malformed` |
-| `isAdmin` | ❌ | `test_is_admin_correct_token`, `test_is_admin_wrong_token`, `test_is_admin_missing` |
-| `issue_token` | ❌ | `test_issue_token_format`, `test_issue_token_roundtrip`, `test_issue_token_secret_sensitivity` |
-| `search_notes` (changed) | ❌ | `test_search_notes_sql_injection`, `test_search_notes_none_user_id` |
-| `delete_note` | ❌ | `test_delete_note_removes_row`, `test_delete_note_sql_injection`, `test_delete_note_nonexistent` |
-| `remove_note` (DELETE route) | ❌ | `test_remove_note_forbidden`, `test_remove_note_success` |
-| `filter_notes` (POST route) | ❌ | `test_filter_notes_rce_expression`, `test_filter_notes_traceback_not_leaked`, `test_filter_notes_valid` |
-| `truncate` (ellipsis branch) | ❌ | `test_truncate_long_text_appends_ellipsis`, `test_truncate_exact_boundary` |
+| `applyFilterExpression` | ❌ | `test_applyFilterExpression_simple_predicate`, `test_applyFilterExpression_code_injection` |
+| `current_user_id` | ❌ | `test_current_user_id_valid_token`, `test_current_user_id_forged_token`, `test_current_user_id_missing_token` |
+| `isAdmin` | ❌ | `test_isAdmin_correct_token`, `test_isAdmin_wrong_token`, `test_isAdmin_missing_header` |
+| `issue_token` | ❌ | `test_issue_token_format`, `test_issue_token_round_trip`, `test_issue_token_different_users_differ` |
+| `search_notes` (changed) | ❌ | `test_search_notes_sql_injection_query`, `test_search_notes_sql_injection_user_id` |
+| `delete_note` | ❌ | `test_delete_note_deletes_row`, `test_delete_note_nonexistent_id`, `test_delete_note_sql_injection` |
+| `remove_note` DELETE route | ❌ | `test_remove_note_no_token_returns_403`, `test_remove_note_valid_token_returns_204` |
+| `filter_notes` POST route | ❌ | `test_filter_notes_eval_injection`, `test_filter_notes_error_no_trace_leak`, `test_filter_notes_valid_expression` |
+| `truncate` ellipsis branch | ❌ | `test_truncate_long_text_ellipsis` |
 
 ---
 
@@ -427,33 +494,36 @@ The existing test suite covers only `slugify` (2 cases) and the short-text branc
 
 | Reviewer | Status | Findings | Time |
 |---|---|---|---|
-| security-reviewer | ✅ ok | 9 | ~15s |
-| style-reviewer | ✅ ok (schema repaired: `violations` → `findings`) | 11 | ~15s |
-| test-coverage-reviewer | ✅ ok (schema repaired: bare array → wrapped object) | 9 | ~15s |
-| docs-reviewer | ✅ ok (schema repaired: bare array → wrapped object) | 8 | ~15s |
+| security-reviewer | ✅ ok | 9 | ~16s |
+| style-reviewer | ✅ ok | 12 | ~16s |
+| test-coverage-reviewer | ✅ ok | 9 | ~15s |
+| docs-reviewer | ✅ ok | 8 | ~15s |
 
 2 findings were reported by more than one reviewer and merged:
-- **Finding 5** (traceback in HTTP response): SEC-6 [security, high] + STY-3 [style, critical] → merged as [security, style], critical
-- **Finding 24** (isAdmin naming): STY-4 [rule 1.1] + STY-5 [rule 1.4] → merged as single finding citing both rules
+- **Finding 5** (traceback in HTTP response body): SEC-6 [security, high] + STY-8 [style, critical] → merged as [security, style], critical — highest severity kept
+- **Finding 23** (`isAdmin` naming): STY-3 [style, rule 1.1] + STY-4 [style, rule 1.4] → merged as [style], high — both rules cited, single fix
 
 ---
 
 ### Checked and clean
 
-- `sample-project/db.py`: `get_note`, `insertNote` body — use parameterised queries correctly
-- `sample-project/utils.py`: `slugify`, `truncate`, `parse_tags` — no injection surface, no security defects
+- `sample-project/db.py`: `get_note` and `insertNote` body — use parameterised queries correctly and are not modified by this diff
+- `sample-project/utils.py`: `slugify`, `truncate`, `parse_tags` — unmodified and safe
 - `sample-project/app.py`: `/auth/register` endpoint — input handled safely
-- `sample-project/app.py`: Flask route type converter `<int:note_id>` constrains `note_id` to integer at the routing layer
-- `sample-project/app.py`: import order within the diff block is consistent with existing module structure
+- `sample-project/app.py`: Flask route type converter `<int:note_id>` — constrains `note_id` to integer at the HTTP routing layer (provides defence-in-depth for finding 4, but does not substitute for parameterised queries in the DB function)
+- `sample-project/config.py`: structure is otherwise correct; new constant follows `SCREAMING_SNAKE_CASE` convention (rule 1.3) — the problem is the value, not the naming
 
 ### Not checked
 
-- Database schema and migrations — not present in diff or repository
-- Dependency versions / third-party library CVEs — `requirements.txt` not changed in this diff; no lockfile present
-- Integration and end-to-end tests — PR author deferred these; they are out of scope for static analysis
-- Rate-limiting, brute-force protection, and CORS configuration — not present in any reviewed file
-- Production deployment configuration (environment variable injection, secrets management) — out of scope for code review
+- Database schema and migrations — not present in the diff or repository
+- Dependency versions and third-party library CVEs — `requirements.txt` not changed in this diff; no lockfile present
+- Flask session/cookie configuration — not modified by this diff
+- TLS/transport security configuration — infrastructure-level, out of diff scope
+- Rate-limiting and brute-force protection — not present in any reviewed file
+- Integration and end-to-end tests — PR author deferred these; out of scope for static analysis
 
 ---
 
-<sub>Generated by four IBM Bob subagents running in parallel, synthesized in Agent mode. Wall clock ~60s. Provenance for every finding is in `reviews/raw/`.</sub>
+<sub>Generated by four IBM Bob subagents running in parallel, synthesized in Agent
+mode. Wall clock ~62s. Provenance for every finding is in
+`reviews/raw/`.</sub>
