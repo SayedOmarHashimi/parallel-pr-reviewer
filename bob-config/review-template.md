@@ -1,6 +1,6 @@
 # Consolidated review template
 
-The orchestrator renders `reviews/PR-42-review.md` in exactly this shape.
+The orchestrator renders `reviews/PR-1-review.md` in exactly this shape.
 `{{...}}` are substitutions; everything else is literal. This is a **template**,
 not sample output — no numbers below are real.
 

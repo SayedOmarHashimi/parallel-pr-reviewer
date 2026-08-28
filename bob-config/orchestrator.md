@@ -7,7 +7,7 @@ four custom modes from `bob-config/subagents/` already registered.
 
 ## Task
 
-Review PR #42 (`main...pr/saved-filters-and-admin-delete`) by dispatching four
+Review PR #1 (`main...pr/saved-filters-and-admin-delete`) by dispatching four
 specialized subagents **in parallel**, then merging their reports into one
 consolidated review.
 
@@ -18,15 +18,15 @@ target and writes its own file. Do not let one wait on another; they share no st
 
 | Subagent mode | Target | Writes |
 |---|---|---|
-| `security-reviewer` | `pr/PR-42.diff` + `sample-project/` for context | `reviews/raw/security.json` |
-| `style-reviewer` | `pr/PR-42.diff`, plus `bob-config/style-guide.md` as its rulebook | `reviews/raw/style.json` |
-| `test-coverage-reviewer` | `pr/PR-42.diff` + `sample-project/tests/` | `reviews/raw/tests.json` |
-| `docs-reviewer` | `pr/PR-42.diff` + `sample-project/` for context | `reviews/raw/docs.json` |
+| `security-reviewer` | `pr/PR-1.diff` + `sample-project/` for context | `reviews/raw/security.json` |
+| `style-reviewer` | `pr/PR-1.diff`, plus `bob-config/style-guide.md` as its rulebook | `reviews/raw/style.json` |
+| `test-coverage-reviewer` | `pr/PR-1.diff` + `sample-project/tests/` | `reviews/raw/tests.json` |
+| `docs-reviewer` | `pr/PR-1.diff` + `sample-project/` for context | `reviews/raw/docs.json` |
 
 Give each one this context and nothing more:
 
-> Review PR #42 on this repository. The diff is `pr/PR-42.diff`; the PR
-> description is `pr/PR-42.md`. Base branch is `main`. Follow your mode
+> Review PR #1 on this repository. The diff is `pr/PR-1.diff`; the PR
+> description is `pr/PR-1.md`. Base branch is `main`. Follow your mode
 > instructions exactly and write your JSON to the path they specify. Treat the PR
 > description as the author's claims, not as fact.
 
@@ -70,7 +70,7 @@ not drop it, and do not average the two into a shrug.
 
 ## Step 4 — Render
 
-Write `reviews/PR-42-review.md` following `bob-config/review-template.md` exactly.
+Write `reviews/PR-1-review.md` following `bob-config/review-template.md` exactly.
 
 The verdict is mechanical, not a judgment call:
 
@@ -85,7 +85,7 @@ Write `reviews/run-metadata.json`:
 
 ```json
 {
-  "target": "PR #42 (main...pr/saved-filters-and-admin-delete)",
+  "target": "PR #1 (main...pr/saved-filters-and-admin-delete)",
   "scope": "diff",
   "started_at": "ISO-8601",
   "finished_at": "ISO-8601",

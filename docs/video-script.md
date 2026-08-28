@@ -12,7 +12,7 @@ Every `{{...}}` below comes from a real run. Do not estimate any of them on came
 
 | Placeholder | Source |
 |---|---|
-| `{{MANUAL_MINUTES}}` | Your timed manual review of `pr/PR-42.diff` |
+| `{{MANUAL_MINUTES}}` | Your timed manual review of `pr/PR-1.diff` |
 | `{{MANUAL_FOUND}}` | Issues you found manually, scored vs `metrics/answer-key.md` |
 | `{{BOB_TIME}}` | `run-metadata.json` → `wall_clock_seconds` |
 | `{{BOB_FOUND}}` | `run-metadata.json` → `findings_after_dedupe` |
@@ -31,7 +31,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 - [ ] Editor theme: high contrast. Default dark themes lose thin syntax colors on re-encode.
 - [ ] Close every unrelated panel, tab, notification, and Slack.
 - [ ] `reviews/raw/` **emptied** — the files must appear on camera, not sit there pre-made.
-- [ ] `pr/PR-42.diff`, `orchestrator.md`, and the Modes panel each pre-opened in a tab so you never hunt for a file mid-take.
+- [ ] `pr/PR-1.diff`, `orchestrator.md`, and the Modes panel each pre-opened in a tab so you never hunt for a file mid-take.
 - [ ] Screen recording at 1080p minimum.
 - [ ] **Scrub for credentials:** no IBM Cloud account id, no API key, no email in any visible panel, title bar, or notification.
 - [ ] Do a silent dry run of the click path once. The demo must not be the first time you click it.
@@ -42,7 +42,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 ### 0:00 – 0:20 · The problem (20s)
 
-**On screen:** `pr/PR-42.diff` open, scrolling slowly.
+**On screen:** `pr/PR-1.diff` open, scrolling slowly.
 
 > "This is a 67-line pull request. To review it properly I have to check four
 > different things — is it secure, does it follow our style guide, is it tested,
@@ -91,7 +91,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 #### 1:35 – 1:55 · Synthesis
 
-**On screen:** Agent mode merging; `reviews/PR-42-review.md` being written.
+**On screen:** Agent mode merging; `reviews/PR-1-review.md` being written.
 
 > "Then Agent mode merges all four. It deduplicates — two reviewers flagged the
 > same swallowed exception — ranks by severity, and every finding keeps the name
@@ -99,7 +99,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 #### 1:55 – 2:25 · The findings — *land the specific one*
 
-**On screen:** `PR-42-review.md`, scroll to the top finding, then to the docs finding.
+**On screen:** `PR-1-review.md`, scroll to the top finding, then to the docs finding.
 
 > "Here's the one I want to show you. This PR adds token authentication. The token
 > is a hash, then a dot, then the user's ID — and the code trusts the ID without
@@ -121,7 +121,7 @@ sweep, and judges scoring "effectiveness" have seen a lot of the latter.
 
 ### 2:35 – 2:52 · Impact and close (17s)
 
-**On screen:** Split — your manual notes beside `PR-42-review.md`.
+**On screen:** Split — your manual notes beside `PR-1-review.md`.
 
 > "I reviewed this same PR by hand first. {{MANUAL_MINUTES}} minutes,
 > {{MANUAL_FOUND}} of the {{PLANTED}} real issues. Bob's four parallel agents:
