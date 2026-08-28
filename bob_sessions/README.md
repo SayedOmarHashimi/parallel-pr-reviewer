@@ -13,13 +13,16 @@ Frames captured from a screen recording of the submission run (run 3,
 | `05-render-and-verdict.png` | Severity breakdown and the mechanical verdict |
 | `06-run-complete.png` | Run complete: verdict, both output files written, all four raw JSONs in the explorer |
 
-## Still to capture manually
+## Captured from the live UI
 
-- [ ] `00-modes-registered.png` — Bob Settings → Modes, showing the four Workspace-scope
-      reviewers alongside the three built-ins. Take this from the live UI; it never
-      appeared in the recording.
-- [ ] `07-final-review.png` — `reviews/PR-1-review.md` open in **rendered markdown
-      preview**, not raw source.
+| File | What it shows |
+|---|---|
+| `00-modes-registered.png` | Bob Settings → Modes: the four Workspace-scope reviewers alongside the three built-ins |
+| `07-final-review.png` | `reviews/PR-1-review.md` — headline verdict, summary, and finding #1 (the `eval()` RCE, tagged by all four reviewers) |
+
+`07` also captures the line *"Reviewed by four parallel passes in N/A (timing not
+available)"* — the orchestrator's no-clock rule propagating into the review text
+rather than a fabricated duration.
 
 ## Before publishing any screenshot
 
