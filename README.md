@@ -20,7 +20,12 @@
 
 Note on branches: `main` holds the codebase **before** the pull request. The changes
 under review live on the `pr/saved-filters-and-admin-delete` branch, which is what
-PR #1 shows. That is what gives the reviewers a real diff to work from.
+[PR #1](https://github.com/SayedOmarHashimi/parallel-pr-reviewer/pull/1) shows. That
+is what gives the reviewers a real diff to work from.
+
+PR #1 shows as merged because it was merged by mistake and immediately reverted, so
+that `main` stays at the pre-review baseline. Its **Files changed** tab still shows
+the full diff the subagents reviewed: 5 files, 67 added, 9 removed.
 
 ## The problem
 
