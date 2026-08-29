@@ -46,8 +46,9 @@ mode**. It performs five steps:
    severity rather than averaging, ranks by severity then confidence, and preserves
    the originating subagent on every finding.
 4. Renders a consolidated review formatted to paste into GitHub.
-5. Writes `reviews/run-metadata.json` with per-subagent timings — the measurements
-   in this submission are Bob's own recorded output, not stopwatch recollections.
+5. Writes `reviews/run-metadata.json` recording per-subagent status, finding counts,
+   and the deduplication it performed. Timing fields are written as `null` — see
+   section 6.
 
 Agent mode is explicitly instructed that it does not review. It has no findings of
 its own and may not attribute anything to a subagent that the subagent did not
