@@ -7,6 +7,21 @@
 
 ---
 
+## Start here
+
+| What | Where |
+|---|---|
+| The pull request being reviewed | [PR #1](https://github.com/SayedOmarHashimi/parallel-pr-reviewer/pull/1) (5 files, 67 added, 9 removed) |
+| Bob's consolidated review of it | [`reviews/PR-1-review.md`](reviews/PR-1-review.md) |
+| The four subagent definitions | [`bob-config/subagents/`](bob-config/subagents) |
+| The orchestration prompt | [`bob-config/orchestrator.md`](bob-config/orchestrator.md) |
+| Evidence of Bob usage | [`bob_sessions/`](bob_sessions) |
+| How the timings were measured | [`reviews/run-metadata.json`](reviews/run-metadata.json) |
+
+Note on branches: `main` holds the codebase **before** the pull request. The changes
+under review live on the `pr/saved-filters-and-admin-delete` branch, which is what
+PR #1 shows. That is what gives the reviewers a real diff to work from.
+
 ## The problem
 
 Reviewing a pull request means checking four unrelated concerns — **security**,
