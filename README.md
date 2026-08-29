@@ -2,6 +2,8 @@
 
 > IBM TechXchange 2026 Pre-conference Dev Day Hackathon submission
 > Theme: *Build with purpose using IBM Bob 2.0* · Workflow: **code review**
+>
+> **▶ [Watch the 3-minute demo](https://youtu.be/UJ7Fsj9TeFs)**
 
 ---
 
