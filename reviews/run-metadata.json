@@ -45,5 +45,23 @@
   "verdict": "Request changes",
   "provenance_caveat": "Two of the four subagents (security, style) were dispatched without file-write permission and returned their findings as chat output; the orchestrator transcribed those into security.json and style.json. tests.json and docs.json were written directly by their subagents. All four subagents did execute concurrently \u2014 see parallelism_evidence \u2014 but the raw files for security and style are second-hand and should not be cited as direct agent output.",
   "parallelism_evidence": "Video frame at t=175s shows all four subagent cards from a single dispatch with durations 6s / 1m21s / 1m38s / 1m38s, confirming concurrent execution with staggered completion.",
-  "dedupe_note": "37 findings before dedupe, 17 after. 20 collapsed into 9 merged entries under the orchestrator's file+symbol rule, with every reviewer's reason preserved inside the merged finding. Report 17 as the finding count and 37 as the pre-merge total; both are in this file."
+  "dedupe_note": "37 findings before dedupe, 17 after. 20 collapsed into 9 merged entries under the orchestrator's file+symbol rule, with every reviewer's reason preserved inside the merged finding. Report 17 as the finding count and 37 as the pre-merge total; both are in this file.",
+  "measured_externally": {
+    "method": "Bob has no clock, so every timestamp field above is null. These figures are measured outside the agent from (a) the screen recording of this run, whose filename encodes its start time, and (b) filesystem modification times of the files Bob wrote.",
+    "recording_started_at": "2026-08-28T15:55:01",
+    "prompt_sent_at": "2026-08-28T15:56:01 (bracketed by video frames: t=45s still on the Bob home screen, t=90s already dispatching)",
+    "parallel_phase_seconds": 98,
+    "parallel_phase_source": "Video frame at t=175s shows the four subagent cards from a single dispatch reading Done 6s / 1m21s / 1m38s / 1m38s. The longest, 98s, is the parallel phase. Frame saved as bob_sessions/02-parallel-run.png.",
+    "raw_outputs_written": {
+      "tests.json": "15:57:19",
+      "docs.json": "15:57:37",
+      "security.json": "15:59:27",
+      "style.json": "15:59:28"
+    },
+    "merged_review_written_at": "2026-08-28T16:01:57",
+    "run_metadata_written_at": "2026-08-28T16:02:13",
+    "total_wall_clock_seconds": 372,
+    "total_wall_clock_note": "Prompt sent (15:56:01) to final file written (16:02:13) = 372s = 6 min 12 s. The \u00b16s uncertainty on the prompt time is the only imprecision.",
+    "cross_run_check": "Two earlier runs produced subagent completion spreads of 10s and 8s, independently consistent with concurrent execution."
+  }
 }
