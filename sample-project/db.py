@@ -10,10 +10,8 @@ def get_connection():
 def search_notes(query, user_id):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT id, title, body FROM notes WHERE user_id = ? AND title LIKE ?",
-        (user_id, "%" + query + "%"),
-    )
+    sql = f"SELECT id, title, body FROM notes WHERE user_id = {user_id} AND title LIKE '%{query}%'"
+    cur.execute(sql)
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -41,3 +39,14 @@ def insertNote(title, body, user_id, tags=[]):
     conn.commit()
     conn.close()
     return note_id
+
+
+def delete_note(note_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(f"DELETE FROM notes WHERE id = {note_id}")
+        conn.commit()
+    except:
+        pass
+    conn.close()
